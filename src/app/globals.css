@@ -1,26 +1,3 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-}
+:root{--ink:#07131c;--paper:#f4f3ed;--white:#fff;--blue:#10a9d6;--ice:#e4f7fc;--line:rgba(7,19,28,.12);--muted:#67737a}@theme inline{--color-ink:var(--ink);--color-paper:var(--paper);--color-peak-blue:var(--blue);--font-sans:var(--font-geist);--font-display:var(--font-archivo);--font-mono:var(--font-geist-mono)}*{box-sizing:border-box}html,body{margin:0;min-height:100%;background:var(--paper);color:var(--ink)}body{font-family:var(--font-geist),system-ui,sans-serif;-webkit-font-smoothing:antialiased}[lang="my"],.myanmar{font-family:var(--font-myanmar),"Myanmar Text",sans-serif;line-height:1.65}h1,h2,h3,.display{font-family:var(--font-archivo),var(--font-geist),sans-serif}[lang="my"] h1,[lang="my"] h2,[lang="my"] h3,[lang="my"] .display{font-family:var(--font-myanmar),"Myanmar Text",sans-serif;letter-spacing:-.025em}a{color:inherit;text-decoration:none}button,input,textarea,select{font:inherit;color:inherit}button,a{-webkit-tap-highlight-color:transparent}:focus-visible{outline:2px solid var(--blue);outline-offset:3px}::selection{background:var(--blue);color:var(--ink)}.mono{font-family:var(--font-geist-mono),monospace;font-variant-numeric:tabular-nums}.admin-input{width:100%;min-height:48px;border:1px solid var(--line);border-radius:12px;background:#fff;padding:12px 14px;outline:none;transition:border-color .18s,box-shadow .18s}.admin-input:focus{border-color:var(--blue);box-shadow:0 0 0 3px rgba(16,169,214,.12)}.admin-label{display:block;margin-bottom:8px;color:rgba(7,19,28,.58);font-size:12px;font-weight:700}@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}

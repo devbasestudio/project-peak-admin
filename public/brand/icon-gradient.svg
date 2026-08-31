@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 2080 2080">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: url(#linear-gradient-2);
+      }
+
+      .cls-2 {
+        fill: url(#linear-gradient);
+      }
+    </style>
+    <linearGradient id="linear-gradient" x1="1040" y1="1461.81" x2="1040" y2="554.83" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#7addf4"/>
+      <stop offset=".81" stop-color="#23abd5"/>
+      <stop offset=".99" stop-color="#1097c6"/>
+    </linearGradient>
+    <linearGradient id="linear-gradient-2" x1="752.37" y1="1461.81" x2="752.37" y2="554.83" xlink:href="#linear-gradient"/>
+  </defs>
+  <polygon class="cls-2" points="1778.82 1340.34 1187.65 1340.34 1095.34 1230.5 969.2 1080.4 897.48 995.04 816.14 898.26 536.95 1230.5 444.65 1340.34 301.18 1340.34 393.48 1230.5 744.41 812.89 816.14 727.53 887.88 812.89 969.21 909.68 1040.94 995.04 1238.8 1230.5 1543.05 1230.5 1193.06 814.01 1112.73 909.6 1041.01 824.24 1121.34 728.66 1193.07 643.29 1264.79 728.65 1686.52 1230.5 1778.82 1340.34"/>
+  <polygon class="cls-1" points="897.44 1165.8 843.07 1230.5 750.77 1340.34 607.31 1340.34 699.61 1230.5 825.71 1080.44 897.44 1165.8"/>
+</svg>
