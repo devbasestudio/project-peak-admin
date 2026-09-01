@@ -12,7 +12,15 @@ export const metadata: Metadata = {
   title: { default: "Project Peak Control Room", template: "%s · Project Peak Admin" },
   description: "Project Peak websites နှစ်ခုလုံးအတွက် unified admin dashboard။",
   robots: { index: false, follow: false },
-  icons: { icon: "/brand/icon.png", apple: "/brand/icon.png" },
+  icons: {
+    icon: [
+      { url: "/brand/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/brand/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/favicon-48.png", sizes: "48x48", type: "image/png" },
+    ],
+    shortcut: "/brand/favicon-32.png",
+    apple: "/brand/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = { themeColor: "#07131c", colorScheme: "light" };
