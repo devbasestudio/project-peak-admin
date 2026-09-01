@@ -2,23 +2,23 @@ import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { createAdminClient, getAuditActorId, writeAudit } from "@/lib/admin-db";
 import { requireAdminSession } from "@/lib/session";
-
-const allowed = new Set(["video/mp4", "video/webm", "video/quicktime", "image/jpeg", "image/png", "image/webp"]);
+import { isAllowedOrigin } from "@/lib/security";
+import { extensionFor, validatedUpload } from "@/lib/upload-validation";
 
 export async function POST(request: Request) {
+  if (!isAllowedOrigin(request)) return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   const session = await requireAdminSession();
   const form = await request.formData();
   const file = form.get("file");
   const isBlog = form.get("intent") === "blog";
   const maxBytes = isBlog ? 8 * 1024 * 1024 : 75 * 1024 * 1024;
   if (!(file instanceof File)) return NextResponse.json({ error: "တင်မယ့် file ရွေးပါ။" }, { status: 400 });
-  if (!allowed.has(file.type) || (isBlog && file.type.startsWith("video/"))) return NextResponse.json({ error: isBlog ? "JPG, PNG, WEBP ပဲ တင်နိုင်ပါတယ်။" : "MP4, WebM, MOV, JPG, PNG, WEBP ပဲ တင်နိုင်ပါတယ်။" }, { status: 415 });
-  if (file.size <= 0 || file.size > maxBytes) return NextResponse.json({ error: `File ကို ${isBlog ? "8" : "75"}MB အောက်ထားပါ။` }, { status: 413 });
+  const bytes = await validatedUpload(file, isBlog, maxBytes);
+  if (!bytes) return NextResponse.json({ error: isBlog ? "JPG, PNG, WEBP ပုံကို 8MB အောက်တင်ပါ။" : "MP4, WebM, MOV, JPG, PNG, WEBP file ကို 75MB အောက်တင်ပါ။" }, { status: 415 });
   const actorId = await getAuditActorId();
-  const extension = (file.name.split(".").pop() || (file.type.startsWith("video/") ? "mp4" : "jpg")).replace(/[^a-z0-9]/gi, "").toLowerCase();
+  const extension = extensionFor(file.type);
   const objectPath = isBlog ? `blog/${randomUUID()}.${extension}` : `program-editor/${actorId}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${extension}`;
   const db = createAdminClient();
-  const bytes = new Uint8Array(await file.arrayBuffer());
   const { error: uploadError } = await db.storage.from("site-assets").upload(objectPath, bytes, { contentType: file.type, upsert: false, cacheControl: "31536000" });
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
   const { data: publicData } = db.storage.from("site-assets").getPublicUrl(objectPath);

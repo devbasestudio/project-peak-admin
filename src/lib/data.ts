@@ -5,6 +5,15 @@ import { adminBlockTypes, type AdminBlockType, type AdminTemplate, type Localize
 function content(value: unknown): LocalizedBlockContent { return value && typeof value === "object" && !Array.isArray(value) ? value as LocalizedBlockContent : {}; }
 function config(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function blockType(value: string): AdminBlockType { return adminBlockTypes.includes(value as AdminBlockType) ? value as AdminBlockType : "rich_text"; }
+function groupByUser<T extends { user_id: string }>(rows: T[]) {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const group = groups.get(row.user_id);
+    if (group) group.push(row);
+    else groups.set(row.user_id, [row]);
+  }
+  return groups;
+}
 
 export async function getCentralOverview() {
   const db = createAdminClient();
@@ -38,7 +47,13 @@ export async function getAdminCustomers() {
     db.from("payment_orders").select("id,user_id,status,reference_code,created_at").order("created_at", { ascending: false }).limit(1000),
   ]);
   const firstError = [profiles.error, programs.error, orders.error].find(Boolean); if (firstError) throw firstError;
-  return (profiles.data ?? []).map((profile) => ({ ...profile, program: (programs.data ?? []).find((program) => program.user_id === profile.id) ?? null, order: (orders.data ?? []).find((order) => order.user_id === profile.id) ?? null }));
+  const programByUser = new Map((programs.data ?? []).map((program) => [program.user_id, program]));
+  const orderByUser = new Map((orders.data ?? []).map((order) => [order.user_id, order]));
+  return (profiles.data ?? []).map((profile) => ({
+    ...profile,
+    program: programByUser.get(profile.id) ?? null,
+    order: orderByUser.get(profile.id) ?? null,
+  }));
 }
 
 export async function getAdminPayments() {
@@ -141,13 +156,17 @@ export async function getCoachingClients() {
   const firstError = [profiles.error, registrations.error, programs.error, templates.error, logs.error, checkins.error].find(Boolean);
   if (firstError) throw firstError;
   const registrationByUser = new Map((registrations.data ?? []).filter((row) => row.user_id).map((row) => [row.user_id, row]));
+  const programByUser = new Map((programs.data ?? []).map((row) => [row.user_id, row]));
+  const templateByUser = new Map((templates.data ?? []).map((row) => [row.user_id, row]));
+  const logsByUser = groupByUser(logs.data ?? []);
+  const checkinsByUser = groupByUser(checkins.data ?? []);
   return (profiles.data ?? []).map((profile) => ({
     ...profile,
     registration: registrationByUser.get(profile.id) ?? null,
-    program: (programs.data ?? []).find((row) => row.user_id === profile.id) ?? null,
-    template: (templates.data ?? []).find((row) => row.user_id === profile.id) ?? null,
-    logs: (logs.data ?? []).filter((row) => row.user_id === profile.id),
-    checkins: (checkins.data ?? []).filter((row) => row.user_id === profile.id),
+    program: programByUser.get(profile.id) ?? null,
+    template: templateByUser.get(profile.id) ?? null,
+    logs: logsByUser.get(profile.id) ?? [],
+    checkins: checkinsByUser.get(profile.id) ?? [],
   }));
 }
 
