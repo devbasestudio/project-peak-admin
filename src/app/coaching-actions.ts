@@ -24,7 +24,11 @@ export async function reviewCoachingPayment(formData: FormData) {
     const { error: rejectError } = await db.from("coaching_registrations").update({ payment_status: "rejected", status: "rejected", updated_at: now }).eq("id", registration.id);
     if (rejectError) throw rejectError;
   } else {
-    if (!registration.payment_screenshot) throw new Error("Payment screenshot မရှိသေးပါ");
+    const intake = registration.intake_answers && typeof registration.intake_answers === "object" && !Array.isArray(registration.intake_answers)
+      ? registration.intake_answers as Record<string, unknown>
+      : {};
+    if (intake.payment_confirmed !== true) throw new Error("Client က payment ပြီးကြောင်း အတည်မပြုရသေးပါ");
+    if (!registration.photo_front || !registration.photo_back || !registration.photo_side) throw new Error("Body photos သုံးပုံ မပြည့်သေးပါ");
     const { error: profileError } = await db.from("coaching_profiles").update({ role: "user", updated_at: now }).eq("id", registration.user_id);
     if (profileError) throw profileError;
     const { error: programError } = await db.from("coaching_programs").upsert({ user_id: registration.user_id, duration_weeks: 12, program_type: "personal_coaching", start_date: now.slice(0, 10), updated_at: now }, { onConflict: "user_id" });

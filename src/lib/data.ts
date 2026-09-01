@@ -166,15 +166,35 @@ export async function getCoachingPayments() {
   const db = createAdminClient();
   const { data, error } = await db
     .from("coaching_registrations")
-    .select("id,user_id,name,email,program_name,program_price,duration_months,payment_status,payment_screenshot,created_at,approved_at,ready_at")
+    .select("id,user_id,name,email,phone,age,height,weight,program_name,program_price,duration_months,payment_method,payment_status,photo_front,photo_back,photo_side,intake_answers,created_at,approved_at,ready_at")
     .order("created_at", { ascending: false })
     .limit(500);
   if (error) throw error;
-  return await Promise.all((data ?? []).map(async (row) => {
-    if (!row.payment_screenshot) return { ...row, payment_url: null };
-    const { data: signed } = await db.storage.from("coaching-registrations").createSignedUrl(row.payment_screenshot, 900);
-    return { ...row, payment_url: signed?.signedUrl ?? null };
-  }));
+  const rows = data ?? [];
+  const privatePaths = [...new Set(rows.flatMap((row) => (["front", "back", "side"] as const).map((slot) => {
+    const value = row[`photo_${slot}`];
+    if (!value || value.startsWith("http://") || value.startsWith("https://")) return null;
+    const path = value.startsWith("private:") ? value.slice("private:".length) : value;
+    return path && !path.startsWith("/") && !path.includes("..") ? path : null;
+  })).filter((path): path is string => path !== null))];
+  const signedByPath = new Map<string, string>();
+  if (privatePaths.length) {
+    const { data: signedRows } = await db.storage.from("coaching-user-photos").createSignedUrls(privatePaths, 900);
+    for (const signed of signedRows ?? []) {
+      if (signed.path && signed.signedUrl) signedByPath.set(signed.path, signed.signedUrl);
+    }
+  }
+  return rows.map((row) => {
+    const photoEntries = (["front", "back", "side"] as const).map((slot) => {
+      const value = row[`photo_${slot}`];
+      if (!value) return [slot, null] as const;
+      if (value.startsWith("http://") || value.startsWith("https://")) return [slot, value] as const;
+      const path = value.startsWith("private:") ? value.slice("private:".length) : value;
+      if (!path || path.startsWith("/") || path.includes("..")) return [slot, null] as const;
+      return [slot, signedByPath.get(path) ?? null] as const;
+    });
+    return { ...row, photo_urls: Object.fromEntries(photoEntries) as Record<"front" | "back" | "side", string | null> };
+  });
 }
 
 export async function getCoachingClients() {
