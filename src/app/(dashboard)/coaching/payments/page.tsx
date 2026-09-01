@@ -12,6 +12,12 @@ function answer(value: unknown) {
   return text || "—";
 }
 
+function measurement(value: unknown, unit: "kg" | "cm") {
+  const text = answer(value);
+  if (text === "—" || text.toLowerCase().includes(unit)) return text;
+  return `${text} ${unit}`;
+}
+
 export default async function CoachingPaymentsPage() {
   const rows = await getCoachingPayments();
   const pending = rows.filter((row) => row.payment_status === "pending").length;
@@ -55,10 +61,10 @@ export default async function CoachingPaymentsPage() {
                         <small>{row.payment_method || "KBZPay"} · {answer(intake.payer_name)}</small>
                         <small>{answer(intake.payer_phone)}</small>
                         <small>Ref: {answer(intake.payment_reference)}</small>
-                        <small>{intake.payment_confirmed === true ? "Client က ပေးချေပြီးကြောင်း confirm လုပ်ထားသည်" : "Payment confirm မရှိသေး"}</small>
+                        <small>{intake.payment_confirmed === true ? "Client က ပေးချေပြီးကြောင်း confirm လုပ်ထားသည်" : ["approved", "ready"].includes(row.payment_status) ? "အရင် flow က approve လုပ်ထားတဲ့ record" : "Payment confirm မရှိသေး"}</small>
                       </td>
                       <td data-label="Body info">
-                        <strong>{row.weight ?? "—"} kg · {row.height ?? "—"} cm · Age {row.age ?? "—"}</strong>
+                        <strong>{measurement(row.weight, "kg")} · {measurement(row.height, "cm")} · Age {row.age ?? "—"}</strong>
                         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 10 }}>
                           {(["front", "back", "side"] as const).map((slot) => row.photo_urls[slot] ? (
                             <a key={slot} className={styles.buttonSecondary} href={row.photo_urls[slot] || "#"} target="_blank" rel="noreferrer">{slot} <ExternalLink size={12} /></a>
