@@ -596,6 +596,9 @@
 }
 
 .panelHeader a {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
   color: #008eb8;
   font-size: 10px;
   font-weight: 750;
