@@ -89,3 +89,78 @@ export async function getAdminTemplate(templateId: string): Promise<AdminTemplat
   if (blocksResult.error) throw blocksResult.error;
   return { id: template.id, slug: template.slug, nameMm: template.name_mm, nameEn: template.name_en, descriptionMm: template.description_mm ?? "", descriptionEn: template.description_en ?? "", versionId: version.id, versionStatus: version.status as AdminTemplate["versionStatus"], versionNo: version.version_no, documents: (documents ?? []).map((document) => ({ id: document.id, screenKey: document.screen_key, dayNumber: document.day_number, titleMm: document.title_mm, titleEn: document.title_en, blocks: (blocksResult.data ?? []).filter((block) => block.document_id === document.id).map((block) => ({ id: block.id, blockType: blockType(block.block_type), titleMm: block.title_mm ?? "", titleEn: block.title_en ?? "", contentMm: content(block.content_mm), contentEn: content(block.content_en), config: config(block.config), visible: block.visible !== false })) })) };
 }
+
+export async function getCoachingOverview() {
+  const db = createAdminClient();
+  const [registrations, clients, trackers, checkins] = await Promise.all([
+    db.from("coaching_registrations").select("id,name,email,payment_status,user_id,created_at").order("created_at", { ascending: false }).limit(8),
+    db.from("coaching_profiles").select("id", { count: "exact", head: true }).eq("role", "user"),
+    db.from("coaching_custom_tracker_templates").select("id", { count: "exact", head: true }).eq("active", true),
+    db.from("coaching_weekly_checkins").select("id", { count: "exact", head: true }),
+  ]);
+  const firstError = [registrations.error, clients.error, trackers.error, checkins.error].find(Boolean);
+  if (firstError) throw firstError;
+  const rows = registrations.data ?? [];
+  return {
+    stats: {
+      clients: clients.count ?? 0,
+      pending: rows.filter((row) => row.payment_status === "pending").length,
+      ready: rows.filter((row) => row.payment_status === "ready").length,
+      templates: trackers.count ?? 0,
+      checkins: checkins.count ?? 0,
+    },
+    recent: rows,
+  };
+}
+
+export async function getCoachingPayments() {
+  const db = createAdminClient();
+  const { data, error } = await db
+    .from("coaching_registrations")
+    .select("id,user_id,name,email,program_name,program_price,duration_months,payment_status,payment_screenshot,created_at,approved_at,ready_at")
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  return await Promise.all((data ?? []).map(async (row) => {
+    if (!row.payment_screenshot) return { ...row, payment_url: null };
+    const { data: signed } = await db.storage.from("coaching-registrations").createSignedUrl(row.payment_screenshot, 900);
+    return { ...row, payment_url: signed?.signedUrl ?? null };
+  }));
+}
+
+export async function getCoachingClients() {
+  const db = createAdminClient();
+  const [profiles, registrations, programs, templates, logs, checkins] = await Promise.all([
+    db.from("coaching_profiles").select("id,username,email,avatar_url,onboarding_complete,created_at").eq("role", "user").order("created_at", { ascending: false }),
+    db.from("coaching_registrations").select("id,user_id,name,email,program_name,payment_status,created_at").order("created_at", { ascending: false }),
+    db.from("coaching_programs").select("id,user_id,duration_weeks,start_date,program_type"),
+    db.from("coaching_custom_tracker_templates").select("id,user_id,name,updated_at").eq("active", true),
+    db.from("coaching_daily_trackers").select("id,user_id,date,body_weight,created_at").order("date", { ascending: false }).limit(3000),
+    db.from("coaching_weekly_checkins").select("id,user_id,week_number,avg_weight,admin_feedback,created_at").order("created_at", { ascending: false }).limit(1000),
+  ]);
+  const firstError = [profiles.error, registrations.error, programs.error, templates.error, logs.error, checkins.error].find(Boolean);
+  if (firstError) throw firstError;
+  const registrationByUser = new Map((registrations.data ?? []).filter((row) => row.user_id).map((row) => [row.user_id, row]));
+  return (profiles.data ?? []).map((profile) => ({
+    ...profile,
+    registration: registrationByUser.get(profile.id) ?? null,
+    program: (programs.data ?? []).find((row) => row.user_id === profile.id) ?? null,
+    template: (templates.data ?? []).find((row) => row.user_id === profile.id) ?? null,
+    logs: (logs.data ?? []).filter((row) => row.user_id === profile.id),
+    checkins: (checkins.data ?? []).filter((row) => row.user_id === profile.id),
+  }));
+}
+
+export async function getCoachingTemplateData() {
+  const db = createAdminClient();
+  const [profiles, registrations, templates] = await Promise.all([
+    db.from("coaching_profiles").select("id,username,email,avatar_url").eq("role", "user").order("username"),
+    db.from("coaching_registrations").select("user_id,name,email,payment_status").in("payment_status", ["approved", "ready"]),
+    db.from("coaching_custom_tracker_templates").select("user_id,name,sections,updated_at").eq("active", true),
+  ]);
+  const firstError = [profiles.error, registrations.error, templates.error].find(Boolean);
+  if (firstError) throw firstError;
+  const registrationsByUser = new Map((registrations.data ?? []).filter((row) => row.user_id).map((row) => [row.user_id, row]));
+  const clients = (profiles.data ?? []).filter((profile) => registrationsByUser.has(profile.id)).map((profile) => ({ ...profile, registration: registrationsByUser.get(profile.id) }));
+  return { clients, templates: templates.data ?? [] };
+}
