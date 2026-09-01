@@ -59,7 +59,7 @@ export function OtpLogin() {
   return <main className={styles.page}>
     <section className={styles.story}>
       <Image src="/brand/logo-light.svg" width={190} height={48} alt="Project Peak" priority />
-      <div><p className={styles.kicker}>ONE CONTROL ROOM · TWO WEBSITES</p><h1>Trainer အတွက်<br /><span>ရှင်းလင်းတဲ့ Control.</span></h1><p>Home Workout customer တွေ၊ payment တွေ၊ program template နဲ့ Main Website blog တွေကို တစ်နေရာထဲက စီမံပါ။</p></div>
+      <div><p className={styles.kicker}>ONE CONTROL ROOM · THREE WEBSITES</p><h1>Trainer အတွက်<br /><span>ရှင်းလင်းတဲ့ Control.</span></h1><p>Home Workout, 1:1 Coaching နဲ့ Main Website blog ကို တစ်နေရာတည်းက ရွေးချယ်ပြီး စီမံပါ။</p></div>
       <div className={styles.securityLine}><LockKeyhole size={17} /><span>Telegram OTP · One active device · 7-day secure session</span></div>
     </section>
     <section className={styles.loginPanel}>

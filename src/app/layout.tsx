@@ -10,7 +10,7 @@ const myanmar = localFont({ src: "./fonts/myanmar-sagar.ttf", variable: "--font-
 
 export const metadata: Metadata = {
   title: { default: "Project Peak Control Room", template: "%s · Project Peak Admin" },
-  description: "Project Peak websites နှစ်ခုလုံးအတွက် unified admin dashboard။",
+  description: "Project Peak websites သုံးခုလုံးအတွက် unified admin dashboard။",
   robots: { index: false, follow: false },
   icons: {
     icon: [
