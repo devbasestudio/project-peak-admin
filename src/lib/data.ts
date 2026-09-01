@@ -105,6 +105,40 @@ export async function getAdminTemplate(templateId: string): Promise<AdminTemplat
   return { id: template.id, slug: template.slug, nameMm: template.name_mm, nameEn: template.name_en, descriptionMm: template.description_mm ?? "", descriptionEn: template.description_en ?? "", versionId: version.id, versionStatus: version.status as AdminTemplate["versionStatus"], versionNo: version.version_no, documents: (documents ?? []).map((document) => ({ id: document.id, screenKey: document.screen_key, dayNumber: document.day_number, titleMm: document.title_mm, titleEn: document.title_en, blocks: (blocksResult.data ?? []).filter((block) => block.document_id === document.id).map((block) => ({ id: block.id, blockType: blockType(block.block_type), titleMm: block.title_mm ?? "", titleEn: block.title_en ?? "", contentMm: content(block.content_mm), contentEn: content(block.content_en), config: config(block.config), visible: block.visible !== false })) })) };
 }
 
+export async function getAdminTemplateExercises(templateId: string) {
+  const db = createAdminClient();
+  const { data: versions, error: versionError } = await db.from("template_versions").select("id,status,version_no").eq("template_id", templateId).order("version_no", { ascending: false });
+  if (versionError) throw versionError;
+  const version = (versions ?? []).find((item) => item.status === "draft") ?? (versions ?? []).find((item) => item.status === "published") ?? versions?.[0];
+  if (!version) return { versionId: "", versionStatus: "draft", versionNo: 0, exercises: [] };
+  const { data: exercises, error: exerciseError } = await db.from("template_exercises").select("id,slug,name_mm,name_en,position").eq("template_version_id", version.id).eq("is_assessment_only", false).order("position");
+  if (exerciseError) throw exerciseError;
+  const ids = (exercises ?? []).map((exercise) => exercise.id);
+  const { data: videos, error: videoError } = ids.length ? await db.from("template_exercise_videos").select("id,template_exercise_id,asset_id,position,role,title_mm,title_en").in("template_exercise_id", ids).order("position") : { data: [], error: null };
+  if (videoError) throw videoError;
+  return {
+    versionId: version.id,
+    versionStatus: version.status,
+    versionNo: version.version_no,
+    exercises: (exercises ?? []).map((exercise) => ({
+      id: exercise.id,
+      slug: exercise.slug,
+      nameMm: exercise.name_mm,
+      nameEn: exercise.name_en,
+      position: exercise.position,
+      videos: (videos ?? []).filter((video) => video.template_exercise_id === exercise.id).map((video) => ({
+        id: video.id,
+        assetId: video.asset_id,
+        position: video.position,
+        role: video.role as "primary" | "alternative",
+        titleMm: video.title_mm,
+        titleEn: video.title_en,
+        previewUrl: `/api/admin/media/${video.asset_id}`,
+      })),
+    })),
+  };
+}
+
 export async function getCoachingOverview() {
   const db = createAdminClient();
   const [registrations, clients, trackers, checkins] = await Promise.all([

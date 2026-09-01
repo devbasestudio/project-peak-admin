@@ -19,15 +19,16 @@ export async function POST(request: Request) {
   const extension = extensionFor(file.type);
   const objectPath = isBlog ? `blog/${randomUUID()}.${extension}` : `program-editor/${actorId}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}.${extension}`;
   const db = createAdminClient();
-  const { error: uploadError } = await db.storage.from("site-assets").upload(objectPath, bytes, { contentType: file.type, upsert: false, cacheControl: "31536000" });
+  const bucket = isBlog ? "site-assets" : "program-media";
+  const { error: uploadError } = await db.storage.from(bucket).upload(objectPath, bytes, { contentType: file.type, upsert: false, cacheControl: "31536000" });
   if (uploadError) return NextResponse.json({ error: uploadError.message }, { status: 500 });
-  const { data: publicData } = db.storage.from("site-assets").getPublicUrl(objectPath);
+  const publicData = isBlog ? db.storage.from(bucket).getPublicUrl(objectPath).data : null;
   let assetId: string | undefined;
   if (!isBlog) {
-    const { data: asset, error: assetError } = await db.from("media_assets").insert({ bucket_id: "site-assets", object_path: objectPath, kind: file.type.startsWith("video/") ? "video" : "image", mime_type: file.type, byte_size: file.size, uploaded_by: actorId }).select("id").single();
-    if (assetError) { await db.storage.from("site-assets").remove([objectPath]); return NextResponse.json({ error: assetError.message }, { status: 500 }); }
+    const { data: asset, error: assetError } = await db.from("media_assets").insert({ bucket_id: bucket, object_path: objectPath, kind: file.type.startsWith("video/") ? "video" : "image", mime_type: file.type, byte_size: file.size, uploaded_by: actorId }).select("id").single();
+    if (assetError) { await db.storage.from(bucket).remove([objectPath]); return NextResponse.json({ error: assetError.message }, { status: 500 }); }
     assetId = asset.id;
   }
   await writeAudit(session.id, isBlog ? "blog.cover.upload" : "template.media.upload", "storage_object", objectPath, { mimeType: file.type, bytes: file.size });
-  return NextResponse.json({ url: publicData.publicUrl, assetId, path: objectPath });
+  return NextResponse.json({ url: isBlog ? publicData?.publicUrl : `/api/admin/media/${assetId}`, assetId, path: objectPath });
 }

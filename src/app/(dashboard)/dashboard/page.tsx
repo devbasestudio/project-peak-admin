@@ -1,15 +1,53 @@
 import Link from "next/link";
-import { ArrowUpRight, CreditCard, Dumbbell, FileText, Newspaper, Users } from "lucide-react";
-import { getCentralOverview } from "@/lib/data";
-import styles from "@/components/admin/admin.module.css";
+import { ArrowUpRight, Dumbbell, Newspaper, PersonStanding } from "lucide-react";
+import styles from "./workspace-picker.module.css";
 
-export default async function DashboardPage() {
-  const { stats, recentOrders, recentAudit } = await getCentralOverview();
-  const cards = [
-    { label: "သင်တန်းသား", value: stats.customers, caption: `${stats.activePrograms} ယောက် active`, icon: Users },
-    { label: "စစ်ဆေးရန် Payment", value: stats.pendingPayments, caption: "Approve လုပ်ဖို့စောင့်နေ", icon: CreditCard },
-    { label: "Program Templates", value: stats.templates, caption: "12 weeks content", icon: Dumbbell },
-    { label: "Blog Posts", value: stats.posts, caption: `${stats.publishedPosts} ခု published`, icon: Newspaper },
-  ];
-  return <><div className={styles.pageHeader}><div><p className={styles.eyebrow}>WEBSITES နှစ်ခု · CONTROL တစ်နေရာ</p><h1 className={styles.pageTitle}>ဒီနေ့ ဘာလုပ်မလဲ?</h1><p className={styles.pageDescription}>လုပ်စရာရှိတာကို အရင်ပြထားပါတယ်။ Payment စစ်တာ၊ customer access နဲ့ blog ရေးတာကို ဒီနေရာကနေ တိုက်ရိုက်လုပ်နိုင်ပါတယ်။</p></div><Link className={styles.button} href="/website/posts/new">Blog အသစ်ရေးမယ် <ArrowUpRight size={15} /></Link></div><div className={styles.statsGrid}>{cards.map(({ label, value, caption, icon: Icon }) => <article className={styles.statCard} key={label}><div className={styles.statTop}><span>{label}</span><span className={styles.statIcon}><Icon size={16} /></span></div><div className={styles.statValue}>{value}</div><div className={styles.statCaption}>{caption}</div></article>)}</div><div className={styles.dashboardGrid}><section className={styles.panel}><div className={styles.panelHeader}><h2>နောက်ဆုံး Payment Orders</h2><Link href="/home-workout/payments">အားလုံးစစ်မယ် →</Link></div>{recentOrders.length ? <div className={styles.tableWrap}><table className={styles.table}><thead><tr><th>Customer</th><th>Reference</th><th>Amount</th><th>Status</th></tr></thead><tbody>{recentOrders.map((order) => <tr key={order.id}><td data-label="Customer"><strong>{order.customerName}</strong><small>{new Date(order.created_at).toLocaleDateString("en-GB")}</small></td><td className="mono" data-label="Reference">{order.reference_code}</td><td className="mono" data-label="Amount">{Number(order.amount_minor).toLocaleString()} {order.currency}</td><td data-label="Status"><span className={styles.status} data-status={order.status}>{order.status.replaceAll("_", " ")}</span></td></tr>)}</tbody></table></div> : <div className={styles.empty}><strong>Payment order မရှိသေးပါ</strong>အသစ်ရောက်လာရင် ဒီမှာပေါ်ပါမယ်။</div>}</section><section className={styles.panel}><div className={styles.panelHeader}><h2>အမြန်လုပ်ဆောင်ချက်</h2></div><div className={`${styles.panelBody} ${styles.stack}`}><Link className={styles.quickLink} href="/home-workout/payments"><span><strong>Payment စစ်မယ်</strong><small>KBZPay receipt နဲ့ reference တိုက်မယ်</small></span><ArrowUpRight size={16} /></Link><Link className={styles.quickLink} href="/home-workout/customers"><span><strong>Customer access</strong><small>Pause / Active ပြောင်းမယ်</small></span><ArrowUpRight size={16} /></Link><Link className={styles.quickLink} href="/website/posts"><span><strong>Blog စီမံမယ်</strong><small>Draft နဲ့ Published posts</small></span><ArrowUpRight size={16} /></Link></div></section></div>{recentAudit.length ? <section className={styles.panel} style={{marginTop:18}}><div className={styles.panelHeader}><h2>နောက်ဆုံးလုပ်ဆောင်ချက်</h2><FileText size={16} /></div><div className={styles.panelBody}>{recentAudit.map((entry) => <div className={styles.quickLink} key={entry.id}><span><strong>{entry.action.replaceAll(".", " · ")}</strong><small>{new Date(entry.created_at).toLocaleString("en-GB")}</small></span></div>)}</div></section> : null}</>;
+const workspaces = [
+  {
+    code: "01",
+    title: "Home Workout",
+    subtitle: "12 Weeks Program",
+    description: "Payment စစ်မယ်၊ သင်တန်းသား access စီမံမယ်၊ workout template နဲ့ exercise videos ပြင်မယ်။",
+    href: "/home-workout/payments",
+    action: "Home Workout ကိုဝင်မယ်",
+    icon: Dumbbell,
+    tone: "cyan",
+  },
+  {
+    code: "02",
+    title: "1:1 Coaching",
+    subtitle: "Personal Coaching",
+    description: "Client တစ်ယောက်ချင်းစီရဲ့ custom plan၊ payment နဲ့ progress ကို တစ်နေရာတည်းက track လုပ်မယ်။",
+    href: "/coaching/overview",
+    action: "1:1 Coaching ကိုဝင်မယ်",
+    icon: PersonStanding,
+    tone: "dark",
+  },
+  {
+    code: "03",
+    title: "Main Website",
+    subtitle: "Project Peak Journal",
+    description: "Main landing page မှာပေါ်မယ့် Blog Post အသစ်ရေးမယ်၊ draft ပြင်မယ်၊ publish လုပ်မယ်။",
+    href: "/website/posts",
+    action: "Main Website ကိုဝင်မယ်",
+    icon: Newspaper,
+    tone: "light",
+  },
+] as const;
+
+export default function DashboardPage() {
+  return <div className={styles.page}>
+    <header className={styles.hero}>
+      <div><p className={styles.eyebrow}>PROJECT PEAK · ADMIN</p><h1>ဘယ် Website ကို<br />စီမံချင်ပါသလဲ?</h1></div>
+      <p>Website တစ်ခုရွေးပြီးတာနဲ့ အဲဒီ Website နဲ့ သက်ဆိုင်တဲ့ menu တွေပဲ မြင်ရပါမယ်။ နောက်တစ်ခုကိုပြောင်းချင်ရင် “Website ပြောင်းမယ်” ကိုနှိပ်ပါ။</p>
+    </header>
+    <section className={styles.grid} aria-label="Project Peak websites">
+      {workspaces.map(({ code, title, subtitle, description, href, action, icon: Icon, tone }) => <Link href={href} className={styles.card} data-tone={tone} key={href}>
+        <div className={styles.cardTop}><span>{code}</span><span className={styles.icon}><Icon size={24} /></span></div>
+        <div className={styles.cardBody}><p>{subtitle}</p><h2>{title}</h2><span>{description}</span></div>
+        <div className={styles.cardAction}><strong>{action}</strong><ArrowUpRight size={18} /></div>
+      </Link>)}
+    </section>
+    <p className={styles.help}>Trainer အတွက် ရိုးရှင်းအောင် Website တစ်ခုချင်းစီကို သီးသန့်ခွဲပြထားပါတယ်။</p>
+  </div>;
 }

@@ -173,27 +173,11 @@ export async function saveTemplateDraft(rawPayload: unknown): Promise<AdminActio
 
     let versionId = requestedVersion.id as string;
     if (requestedVersion.status !== "draft") {
-      const { data: latest } = await supabase
-        .from("template_versions")
-        .select("version_no")
-        .eq("template_id", payload.templateId)
-        .order("version_no", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      const { data: draft, error: draftError } = await supabase
-        .from("template_versions")
-        .insert({
-          template_id: payload.templateId,
-          version_no: (latest?.version_no ?? 0) + 1,
-          status: "draft",
-          name_mm: payload.nameMm,
-          name_en: payload.nameEn,
-          created_by: viewer.user.id,
-        })
-        .select("id")
-        .single();
+      const { data: draft, error: draftError } = await supabase.rpc("clone_template_version", {
+        p_source_version_id: requestedVersion.id,
+      });
       if (draftError) throw draftError;
-      versionId = draft.id;
+      versionId = draft as string;
     } else {
       const { error: versionError } = await supabase
         .from("template_versions")
@@ -261,6 +245,62 @@ export async function saveTemplateDraft(rawPayload: unknown): Promise<AdminActio
     revalidatePath(adminPath(payload.locale, `/templates/${payload.templateId}`));
     await writeAudit(viewer.session.id, "template.draft.save", "program_template", payload.templateId, { versionId });
     return { ok: true, message: "Draft saved", templateId: payload.templateId, versionId };
+  } catch (error) {
+    return { ok: false, message: cleanError(error) };
+  }
+}
+
+export async function saveExerciseVideoVariant(rawPayload: unknown): Promise<AdminActionResult> {
+  const parsed = z.object({
+    templateId: uuidSchema,
+    versionId: uuidSchema,
+    exerciseSlug: z.string().min(1).max(120),
+    role: z.enum(["primary", "alternative"]),
+    assetId: uuidSchema,
+    locale: localeSchema,
+  }).safeParse(rawPayload);
+  if (!parsed.success) return { ok: false, message: cleanError(parsed.error) };
+  const viewer = await requireAdmin(parsed.data.locale);
+  const supabase = await createClient();
+
+  try {
+    const { data: requestedVersion, error: versionError } = await supabase
+      .from("template_versions")
+      .select("id,status,template_id")
+      .eq("id", parsed.data.versionId)
+      .eq("template_id", parsed.data.templateId)
+      .single();
+    if (versionError) throw versionError;
+    let versionId = requestedVersion.id as string;
+    if (requestedVersion.status !== "draft") {
+      const { data: clonedId, error: cloneError } = await supabase.rpc("clone_template_version", { p_source_version_id: versionId });
+      if (cloneError) throw cloneError;
+      versionId = clonedId as string;
+    }
+
+    const { data: exercise, error: exerciseError } = await supabase
+      .from("template_exercises")
+      .select("id")
+      .eq("template_version_id", versionId)
+      .eq("slug", parsed.data.exerciseSlug)
+      .single();
+    if (exerciseError) throw exerciseError;
+    const isAlternative = parsed.data.role === "alternative";
+    const { error: saveError } = await supabase.from("template_exercise_videos").upsert({
+      template_exercise_id: exercise.id,
+      position: isAlternative ? 2 : 1,
+      role: parsed.data.role,
+      asset_id: parsed.data.assetId,
+      title_mm: isAlternative ? "အစားထိုးနည်း" : "အဓိကနည်း",
+      title_en: isAlternative ? "Alternative movement" : "Main movement",
+      cue_mm: isAlternative ? "အဓိကနည်း အဆင်မပြေရင် ဒီနည်းကို ရွေးနိုင်ပါတယ်။" : "Form ကိုကြည့်ပြီး Set မစခင် လေ့လာပါ။",
+      cue_en: isAlternative ? "Choose this when the main movement is not comfortable." : "Review the form before your first set.",
+    }, { onConflict: "template_exercise_id,role" });
+    if (saveError) throw saveError;
+
+    await writeAudit(viewer.session.id, "template.exercise_video.save", "program_template", parsed.data.templateId, { versionId, exerciseSlug: parsed.data.exerciseSlug, role: parsed.data.role });
+    revalidatePath(`/home-workout/templates/${parsed.data.templateId}`);
+    return { ok: true, message: isAlternative ? "အစားထိုး Video သိမ်းပြီးပြီ" : "အဓိက Video သိမ်းပြီးပြီ", templateId: parsed.data.templateId, versionId };
   } catch (error) {
     return { ok: false, message: cleanError(error) };
   }
