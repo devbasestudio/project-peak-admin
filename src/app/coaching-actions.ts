@@ -43,15 +43,29 @@ export async function saveCoachingTemplate(input: unknown) {
   const db = createAdminClient();
   const now = new Date().toISOString();
   const { error } = await db.from("coaching_custom_tracker_templates").upsert({ user_id: parsed.data.userId, name: parsed.data.name, sections: parsed.data.sections, active: true, updated_at: now }, { onConflict: "user_id" });
-  if (error) return { ok: false, message: error.message };
+  if (error) {
+    console.error("Coaching template save failed", error.code);
+    return { ok: false, message: "Template save မအောင်မြင်ပါ။ ပြန်စမ်းကြည့်ပါ။" };
+  }
   if (parsed.data.markReady) {
     const { data: registration, error: registrationError } = await db.from("coaching_registrations").select("id,payment_status").eq("user_id", parsed.data.userId).maybeSingle();
-    if (registrationError) return { ok: false, message: registrationError.message };
+    if (registrationError) {
+      console.error("Coaching registration lookup failed", registrationError.code);
+      return { ok: false, message: "Client access စစ်မရပါ။ ပြန်စမ်းကြည့်ပါ။" };
+    }
     if (!registration || !["approved", "ready"].includes(registration.payment_status)) return { ok: false, message: "Payment approve အရင်လုပ်ပေးပါ" };
-    await db.from("coaching_profiles").update({ onboarding_complete: true, updated_at: now }).eq("id", parsed.data.userId);
-    await db.from("coaching_registrations").update({ payment_status: "ready", status: "ready", ready_at: now, updated_at: now }).eq("id", registration.id);
+    const { error: profileError } = await db.from("coaching_profiles").update({ onboarding_complete: true, updated_at: now }).eq("id", parsed.data.userId);
+    if (profileError) {
+      console.error("Coaching profile activation failed", profileError.code);
+      return { ok: false, message: "Client dashboard ဖွင့်မရပါ။ ပြန်စမ်းကြည့်ပါ။" };
+    }
+    const { error: readyError } = await db.from("coaching_registrations").update({ payment_status: "ready", status: "ready", ready_at: now, updated_at: now }).eq("id", registration.id);
+    if (readyError) {
+      console.error("Coaching registration activation failed", readyError.code);
+      return { ok: false, message: "Client access ready မလုပ်နိုင်ပါ။ ပြန်စမ်းကြည့်ပါ။" };
+    }
   }
   await writeAudit(viewer.session.id, parsed.data.markReady ? "coaching.template.ready" : "coaching.template.save", "coaching_profile", parsed.data.userId);
   revalidatePath("/coaching/templates"); revalidatePath("/coaching/clients"); revalidatePath("/coaching/overview");
-  return { ok: true, message: parsed.data.markReady ? "Template save ပြီး client dashboard ဖွင့်ပေးလိုက်ပါပြီ" : "Template save ပြီးပါပြီ" };
+  return { ok: true, message: parsed.data.markReady ? "Template save ပြီး client စသုံးနိုင်ပါပြီ" : "အပြောင်းအလဲ သိမ်းပြီးပါပြီ" };
 }

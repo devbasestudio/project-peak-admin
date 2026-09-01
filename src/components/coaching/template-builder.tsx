@@ -177,7 +177,7 @@ export function CoachingTemplateBuilder({ clients, templates }: { clients: Clien
           <ol className={styles.steps} aria-label="Template setup progress">
             <li data-done={Boolean(clientId)}><span>1</span><div><strong>Client ရွေးမယ်</strong><small>{selectedClient?.email || "Client ရွေးပါ"}</small></div><Check size={17} /></li>
             <li data-done={fieldCount > 0}><span>2</span><div><strong>နေ့စဉ်ပုံစံ ဆောက်မယ်</strong><small>{fieldCount} fields ထည့်ထားပါတယ်</small></div><Check size={17} /></li>
-            <li data-done={activated && !dirty}><span>3</span><div><strong>Client ကို ဖွင့်ပေးမယ်</strong><small>{activated && !dirty ? "အသုံးပြုနိုင်ပါပြီ" : "Activate လုပ်ရန်ကျန်ပါတယ်"}</small></div><ChevronRight size={17} /></li>
+            <li data-done={activated && !dirty}><span>3</span><div><strong>Client ကို စသုံးခွင့်ပေးမယ်</strong><small>{activated && !dirty ? "အသုံးပြုနိုင်ပါပြီ" : "Activate လုပ်ရန်ကျန်ပါတယ်"}</small></div><ChevronRight size={17} /></li>
           </ol>
 
           <section className={styles.setupCard}>
@@ -263,9 +263,9 @@ export function CoachingTemplateBuilder({ clients, templates }: { clients: Clien
           </div>
 
           <div className={styles.actions}>
-            <div><strong>{dirty ? "ပြင်ထားတာတွေ မသိမ်းရသေးပါ" : "Template အသင့်ဖြစ်ပါတယ်"}</strong><span>Draft က client ကို ready မပြောင်းပါ။ Activate လုပ်မှ client စသုံးနိုင်ပါမယ်။</span></div>
-            <button disabled={pending || !canSave || !dirty} onClick={() => save(false)}><Save size={17} />{pending ? "သိမ်းနေပါတယ်…" : "Draft သိမ်းမယ်"}</button>
-            <button disabled={pending || !canSave} data-primary onClick={() => save(true)}><Send size={17} />{pending ? "ဖွင့်ပေးနေပါတယ်…" : "Save + Client ကိုဖွင့်ပေးမယ်"}</button>
+            <div><strong>{dirty ? "ပြင်ထားတာတွေ မသိမ်းရသေးပါ" : "Template အသင့်ဖြစ်ပါတယ်"}</strong><span>{activated ? "Client က စသုံးနေပြီဖြစ်လို့ Save လုပ်တာနဲ့ ပြင်ဆင်မှုအသစ်တွေ app မှာ ပေါ်ပါမယ်။" : "အရင် Save လုပ်ထားနိုင်ပါတယ်။ Client စသုံးဖို့ အသင့်ဖြစ်ချိန်မှ Activate လုပ်ပါ။"}</span></div>
+            <button disabled={pending || !canSave || !dirty} onClick={() => save(false)}><Save size={17} />{pending ? "သိမ်းနေပါတယ်…" : "အပြောင်းအလဲ သိမ်းမယ်"}</button>
+            <button disabled={pending || !canSave || (activated && !dirty)} data-primary onClick={() => save(true)}><Send size={17} />{pending ? "ဖွင့်ပေးနေပါတယ်…" : activated ? "Save + Ready ထားမယ်" : "Save + Client ကိုဖွင့်ပေးမယ်"}</button>
             {message ? <p role="status" data-success={!message.includes("အရင်") && !message.includes("မမှန်")}>{message}</p> : null}
           </div>
         </>
