@@ -25,10 +25,12 @@ export type PostActionState = { ok: boolean; message?: string; errors?: Record<s
 export const initialPostState: PostActionState = { ok: false };
 
 function parsePost(formData: FormData) {
+  const title = String(formData.get("title") ?? "");
+  const excerpt = String(formData.get("excerpt") ?? "");
   return postSchema.safeParse({
-    title: formData.get("title"), slug: formData.get("slug"), language: formData.get("language"),
-    excerpt: formData.get("excerpt"), content: formData.get("content"), coverImageUrl: formData.get("coverImageUrl"),
-    coverImagePath: formData.get("coverImagePath"), seoTitle: formData.get("seoTitle"), seoDescription: formData.get("seoDescription"),
+    title, slug: formData.get("slug"), language: formData.get("language"),
+    excerpt, content: formData.get("content"), coverImageUrl: formData.get("coverImageUrl"),
+    coverImagePath: formData.get("coverImagePath"), seoTitle: title.slice(0, 180), seoDescription: excerpt.slice(0, 320),
     status: formData.get("status"), featured: formData.get("featured") === "on",
   });
 }

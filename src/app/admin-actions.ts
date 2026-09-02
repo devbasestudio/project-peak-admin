@@ -163,83 +163,18 @@ export async function saveTemplateDraft(rawPayload: unknown): Promise<AdminActio
   const supabase = await createClient();
 
   try {
-    const { data: requestedVersion, error: requestedError } = await supabase
-      .from("template_versions")
-      .select("id,template_id,status,version_no")
-      .eq("id", payload.versionId)
-      .eq("template_id", payload.templateId)
-      .single();
-    if (requestedError) throw requestedError;
-
-    let versionId = requestedVersion.id as string;
-    if (requestedVersion.status !== "draft") {
-      const { data: draft, error: draftError } = await supabase.rpc("clone_template_version", {
-        p_source_version_id: requestedVersion.id,
-      });
-      if (draftError) throw draftError;
-      versionId = draft as string;
-    } else {
-      const { error: versionError } = await supabase
-        .from("template_versions")
-        .update({ name_mm: payload.nameMm, name_en: payload.nameEn })
-        .eq("id", versionId)
-        .eq("status", "draft");
-      if (versionError) throw versionError;
-    }
-
-    const { error: templateError } = await supabase
-      .from("program_templates")
-      .update({
-        slug: payload.slug,
-        name_mm: payload.nameMm,
-        name_en: payload.nameEn,
-        description_mm: payload.descriptionMm,
-        description_en: payload.descriptionEn,
-      })
-      .eq("id", payload.templateId);
-    if (templateError) throw templateError;
-
-    const { error: deleteError } = await supabase
-      .from("template_documents")
-      .delete()
-      .eq("template_version_id", versionId);
-    if (deleteError) throw deleteError;
-
-    const documentRows = payload.documents.map((document, index) => ({
-      template_version_id: versionId,
-      screen_key: document.screenKey,
-      day_number: document.dayNumber,
-      title_mm: document.titleMm,
-      title_en: document.titleEn,
-      position: index + 1,
-    }));
-    const { data: insertedDocuments, error: documentError } = await supabase
-      .from("template_documents")
-      .insert(documentRows)
-      .select("id,position");
-    if (documentError) throw documentError;
-
-    const idByPosition = new Map((insertedDocuments ?? []).map((document) => [Number(document.position), document.id as string]));
-    const blockRows = payload.documents.flatMap((document, documentIndex) => {
-      const documentId = idByPosition.get(documentIndex + 1);
-      if (!documentId) return [];
-      return document.blocks.map((block, blockIndex) => ({
-        document_id: documentId,
-        parent_id: null,
-        position: blockIndex + 1,
-        block_type: block.blockType,
-        title_mm: block.titleMm || null,
-        title_en: block.titleEn || null,
-        content_mm: block.contentMm,
-        content_en: block.contentEn,
-        config: block.config,
-        visible: block.visible,
-      }));
+    const { data: versionId, error: saveError } = await supabase.rpc("save_template_draft", {
+      p_template_id: payload.templateId,
+      p_version_id: payload.versionId,
+      p_slug: payload.slug,
+      p_name_mm: payload.nameMm,
+      p_name_en: payload.nameEn,
+      p_description_mm: payload.descriptionMm,
+      p_description_en: payload.descriptionEn,
+      p_documents: payload.documents,
     });
-    if (blockRows.length) {
-      const { error: blocksError } = await supabase.from("template_blocks").insert(blockRows);
-      if (blocksError) throw blocksError;
-    }
+    if (saveError) throw saveError;
+    if (typeof versionId !== "string") throw new Error("Template draft was not saved");
 
     revalidatePath(adminPath(payload.locale, "/templates"));
     revalidatePath(adminPath(payload.locale, `/templates/${payload.templateId}`));
@@ -317,21 +252,12 @@ export async function publishTemplateVersion(
   const supabase = await createClient();
 
   try {
-    const { error: archiveError } = await supabase
-      .from("template_versions")
-      .update({ status: "archived" })
-      .eq("template_id", parsed.data.templateId)
-      .eq("status", "published")
-      .neq("id", parsed.data.versionId);
-    if (archiveError) throw archiveError;
-
-    const { error: publishError } = await supabase
-      .from("template_versions")
-      .update({ status: "published", published_at: new Date().toISOString() })
-      .eq("id", parsed.data.versionId)
-      .eq("template_id", parsed.data.templateId)
-      .eq("status", "draft");
+    const { data: publishedId, error: publishError } = await supabase.rpc("publish_template_version_atomic", {
+      p_template_id: parsed.data.templateId,
+      p_version_id: parsed.data.versionId,
+    });
     if (publishError) throw publishError;
+    if (publishedId !== parsed.data.versionId) throw new Error("Template version was not published");
 
     revalidatePath(adminPath(parsed.data.locale, "/templates"));
     revalidatePath(adminPath(parsed.data.locale, `/templates/${parsed.data.templateId}`));
@@ -367,17 +293,13 @@ export async function reviewPaymentOrder(
       const { error } = await supabase.rpc("approve_payment_order", rpcArgs);
       if (error) throw error;
     } else {
-      const { error } = await supabase
-        .from("payment_orders")
-        .update({
-          status: "rejected",
-          rejected_at: new Date().toISOString(),
-          reviewed_by: viewer.user.id,
-          review_note: parsed.data.reviewNote || null,
-        })
-        .eq("id", parsed.data.orderId)
-        .in("status", ["awaiting_payment", "submitted"]);
+      const { data: rejectedId, error } = await supabase.rpc("reject_payment_order_atomic", {
+        p_order_id: parsed.data.orderId,
+        p_reviewer_id: viewer.user.id,
+        p_note: parsed.data.reviewNote || null,
+      });
       if (error) throw error;
+      if (rejectedId !== parsed.data.orderId) throw new Error("Payment order was not rejected");
     }
 
     revalidatePath(adminPath(parsed.data.locale));
@@ -400,8 +322,12 @@ export async function updateProgramStatus(
   const viewer = await requireAdmin(parsed.data.locale);
   const supabase = await createClient();
   try {
-    const { error } = await supabase.from("programs").update({ status: parsed.data.status }).eq("id", parsed.data.programId);
+    const { data: updatedId, error } = await supabase.rpc("update_program_status_strict", {
+      p_program_id: parsed.data.programId,
+      p_status: parsed.data.status,
+    });
     if (error) throw error;
+    if (updatedId !== parsed.data.programId) throw new Error("Program status was not updated");
     revalidatePath(adminPath(parsed.data.locale, "/customers"));
     await writeAudit(viewer.session.id, "program.status.update", "program", parsed.data.programId, { status: parsed.data.status });
     return { ok: true, message: `Program ${parsed.data.status}` };
