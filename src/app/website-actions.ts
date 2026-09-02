@@ -23,7 +23,6 @@ const postSchema = z.object({
 });
 
 export type PostActionState = { ok: boolean; message?: string; errors?: Record<string, string[]> };
-export const initialPostState: PostActionState = { ok: false };
 
 function parsePost(formData: FormData) {
   const title = String(formData.get("title") ?? "");

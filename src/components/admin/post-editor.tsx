@@ -8,10 +8,12 @@ import {
   LoaderCircle, Minimize2, Save,
 } from "lucide-react";
 import { toast } from "sonner";
-import { createPost, initialPostState, type PostActionState, updatePost } from "@/app/website-actions";
+import { createPost, type PostActionState, updatePost } from "@/app/website-actions";
 import type { BlogPost } from "@/lib/blog";
 import { MarkdownContent } from "@/components/admin/markdown-content";
 import { normalizeRichTextContent, RichTextEditor } from "@/components/admin/rich-text-editor";
+
+const initialPostState: PostActionState = { ok: false };
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/[\s-]+/g, "-").replace(/^-|-$/g, "");

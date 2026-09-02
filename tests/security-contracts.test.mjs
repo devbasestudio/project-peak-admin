@@ -14,6 +14,12 @@ test("admin mutations use atomic database functions", async () => {
   ]) assert.match(source, new RegExp(`rpc\\(\\\"${rpc}\\\"`));
 });
 
+test("server-action modules only export callable actions and erased types", async () => {
+  const source = await read("src/app/website-actions.ts");
+  assert.doesNotMatch(source, /export\s+const\s+initialPostState/);
+  assert.match(source, /export\s+async\s+function\s+createPost/);
+});
+
 test("journal editor keeps the owner-facing fields and formatting controls", async () => {
   const source = await read("src/components/admin/post-editor.tsx");
   for (const field of ["title", "excerpt", "content", "coverImageUrl", "status", "language", "featured"]) {
@@ -26,5 +32,7 @@ test("journal editor keeps the owner-facing fields and formatting controls", asy
   assert.match(richEditor, /clamp\(520px, 62vh, 760px\)/);
   assert.match(richEditor, /insertUnorderedList/);
   assert.match(richEditor, /insertOrderedList/);
+  assert.match(richEditor, /aria-pressed/);
+  assert.match(richEditor, /current === tag \? "p" : tag/);
   assert.doesNotMatch(richEditor, /`\*\*/);
 });
