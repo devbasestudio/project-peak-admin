@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useTransition } from "react";
 import { Dumbbell, Plus, Save, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { saveCoachingWorkout } from "@/app/coaching-actions";
 import styles from "./content-managers.module.css";
 
@@ -13,6 +14,7 @@ type EditExercise = { id?:number; exerciseName:string; targetSets:number; target
 const blankExercise = ():EditExercise => ({ exerciseName:"", targetSets:3, targetReps:"8-12" });
 
 export function WorkoutManager({clients,workouts,today}:{clients:Client[];workouts:Workout[];today:string}){
+  const router=useRouter();
   const [clientId,setClientId]=useState(clients[0]?.id??"");
   const [workoutId,setWorkoutId]=useState<number|undefined>();
   const [date,setDate]=useState(today);
@@ -25,7 +27,7 @@ export function WorkoutManager({clients,workouts,today}:{clients:Client[];workou
   const selectedClient=clients.find(row=>row.id===clientId);
   function selectWorkout(row:Workout){setWorkoutId(row.id);setDate(row.date);setSplitName(row.split_name);setExercises(row.exercises.length?row.exercises.map(ex=>({id:ex.id,exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12"})):[blankExercise()]);setMessage("");}
   function fresh(){setWorkoutId(undefined);setDate(today);setSplitName("Full Body");setExercises([blankExercise()]);setMessage("");}
-  function save(){setMessage("");startTransition(async()=>{const result=await saveCoachingWorkout({id:workoutId,userId:clientId,date,splitName,exercises});setOk(result.ok);setMessage(result.message);if(result.ok&&result.workoutId)setWorkoutId(result.workoutId);});}
+  function save(){setMessage("");startTransition(async()=>{const result=await saveCoachingWorkout({id:workoutId,userId:clientId,date,splitName,exercises});setOk(result.ok);setMessage(result.message);if(result.ok&&result.workoutId){setWorkoutId(result.workoutId);router.refresh();}});}
   return <div className={styles.page}>
     <header className={styles.hero}><div><p>1:1 COACHING · WORKOUTS</p><h1>Workout ကို ရက်အလိုက်ပြင်မယ်</h1><span>Client ရွေး၊ ဆော့မယ့်ရက်ရွေး၊ exercise တွေထည့်ပြီး Save တစ်ချက်နှိပ်ရုံပါ။ သိမ်းထားတာ client ရဲ့ Workout screen မှာပြန်ပေါ်ပါမယ်။</span></div>{message?<div className={styles.status} data-ok={ok}>{message}</div>:null}</header>
     <ol className={styles.steps}><li><b>1</b><span><strong>Client ရွေးမယ်</strong><small>{selectedClient?.email||"—"}</small></span></li><li><b>2</b><span><strong>ရက်နဲ့ Session</strong><small>{date} · {splitName}</small></span></li><li><b>3</b><span><strong>Exercise သိမ်းမယ်</strong><small>{exercises.length} exercises</small></span></li></ol>
