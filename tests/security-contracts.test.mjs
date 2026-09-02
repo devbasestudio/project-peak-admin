@@ -50,6 +50,27 @@ test("exercise videos load only after the admin asks to preview one", async () =
   assert.doesNotMatch(mediaRoute, /NextResponse\.redirect/);
 });
 
+test("1:1 client progress has a detailed drill-down and repeat-safe demo seed", async () => {
+  const clientsPage = await read("src/app/(dashboard)/coaching/clients/page.tsx");
+  assert.match(clientsPage, /coaching\/clients\/\$\{client\.id\}/);
+  assert.match(clientsPage, /အသေးစိတ်/);
+
+  const detailPage = await read("src/app/(dashboard)/coaching/clients/[clientId]/page.tsx");
+  for (const label of ["WEIGHT TREND", "DAILY ACTIVITY", "WORKOUT HISTORY", "WEEKLY REVIEW", "CUSTOM TEMPLATE", "VISUAL PROGRESS"]) {
+    assert.match(detailPage, new RegExp(label));
+  }
+  const data = await read("src/lib/data.ts");
+  for (const table of ["coaching_daily_trackers", "coaching_weekly_checkins", "coaching_workouts", "coaching_custom_tracker_templates"]) {
+    assert.match(data, new RegExp(`from\\(\"${table}\"\\)`));
+  }
+
+  const seed = await read("supabase/demo/seed-coaching-progress-demo.sql");
+  assert.match(seed, /phyodynamics@gmail\.com/);
+  assert.match(seed, /on conflict \(user_id, date\) do nothing/);
+  assert.match(seed, /on conflict \(user_id, week_number\) do nothing/);
+  assert.doesNotMatch(seed, /delete\s+from/i);
+});
+
 test("server-action modules only export callable actions and erased types", async () => {
   const source = await read("src/app/website-actions.ts");
   assert.doesNotMatch(source, /export\s+const\s+initialPostState/);

@@ -288,6 +288,84 @@ export async function getCoachingClients() {
   }));
 }
 
+function privateCoachingPath(value: string | null | undefined) {
+  if (!value || value.startsWith("http://") || value.startsWith("https://")) return null;
+  const path = value.startsWith("private:") ? value.slice("private:".length) : value;
+  return path && !path.startsWith("/") && !path.includes("..") ? path : null;
+}
+
+export async function getCoachingClientProgress(clientId: string) {
+  const db = createAdminClient();
+  const [profile, registration, program, template, trackers, checkins, bodyProfile, schedule, workouts, journals] = await Promise.all([
+    db.from("coaching_profiles").select("id,username,email,avatar_url,onboarding_complete,created_at").eq("id", clientId).eq("role", "user").maybeSingle(),
+    db.from("coaching_registrations").select("id,user_id,name,email,phone,age,height,weight,program_name,payment_status,intake_answers,photo_front,photo_back,photo_side,created_at,approved_at,ready_at").eq("user_id", clientId).maybeSingle(),
+    db.from("coaching_programs").select("id,user_id,duration_weeks,target_calories,macros_p,macros_c,macros_f,program_type,start_date,created_at,updated_at").eq("user_id", clientId).maybeSingle(),
+    db.from("coaching_custom_tracker_templates").select("id,user_id,name,sections,active,created_at,updated_at").eq("user_id", clientId).eq("active", true).maybeSingle(),
+    db.from("coaching_daily_trackers").select("id,user_id,date,body_weight,steps,sleep_score,water_3l,omega_3,bed_phone_filter,meal_plan_adhered,toilet,phone_off_time,water_liters,wake_time,one_win,one_struggle,tracker_values,created_at").eq("user_id", clientId).order("date", { ascending: false }).limit(180),
+    db.from("coaching_weekly_checkins").select("id,user_id,week_number,avg_weight,progress_photo_url,energy_workout,energy_workout_notes,energy_daily,energy_daily_notes,motivation,motivation_notes,struggle_notes,improvement_notes,upcoming_disruptions,changes_wanted,admin_feedback,created_at").eq("user_id", clientId).order("week_number", { ascending: false }).limit(52),
+    db.from("coaching_user_profiles").select("id,user_id,height_cm,starting_weight,age,body_fat_percent,desired_body_text,created_at,updated_at").eq("user_id", clientId).maybeSingle(),
+    db.from("coaching_weekly_schedule").select("id,user_id,day_of_week,split_name,is_rest").eq("user_id", clientId).order("day_of_week"),
+    db.from("coaching_workouts").select("id,user_id,date,split_name,completed,user_notes,user_feelings,created_at").eq("user_id", clientId).order("date", { ascending: false }).limit(180),
+    db.from("coaching_journaling").select("id,user_id,date,diet_status,satisfied_with,difficult_with,created_at").eq("user_id", clientId).order("date", { ascending: false }).limit(60),
+  ]);
+  const firstError = [profile.error, registration.error, program.error, template.error, trackers.error, checkins.error, bodyProfile.error, schedule.error, workouts.error, journals.error].find(Boolean);
+  if (firstError) throw firstError;
+  if (!profile.data) return null;
+
+  const workoutIds = (workouts.data ?? []).map((workout) => workout.id);
+  const { data: exercises, error: exerciseError } = workoutIds.length
+    ? await db.from("coaching_workout_exercises").select("id,workout_id,exercise_name,target_sets,target_reps,actual_weight,actual_reps").in("workout_id", workoutIds)
+    : { data: [], error: null };
+  if (exerciseError) throw exerciseError;
+
+  const rawPhotos = [
+    registration.data?.photo_front,
+    registration.data?.photo_back,
+    registration.data?.photo_side,
+    ...(checkins.data ?? []).map((checkin) => checkin.progress_photo_url),
+  ];
+  const privatePaths = [...new Set(rawPhotos.map(privateCoachingPath).filter((path): path is string => Boolean(path)))];
+  const signedByPath = new Map<string, string>();
+  if (privatePaths.length) {
+    const { data: signedRows } = await db.storage.from("coaching-user-photos").createSignedUrls(privatePaths, 900);
+    for (const signed of signedRows ?? []) if (signed.path && signed.signedUrl) signedByPath.set(signed.path, signed.signedUrl);
+  }
+  const photoUrl = (value: string | null | undefined) => {
+    if (!value) return null;
+    if (value.startsWith("http://") || value.startsWith("https://")) return value;
+    const path = privateCoachingPath(value);
+    return path ? signedByPath.get(path) ?? null : null;
+  };
+
+  const exercisesByWorkout = new Map<number, typeof exercises>();
+  for (const exercise of exercises ?? []) {
+    const group = exercisesByWorkout.get(exercise.workout_id) ?? [];
+    group.push(exercise);
+    exercisesByWorkout.set(exercise.workout_id, group);
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    profile: profile.data,
+    registration: registration.data ? {
+      ...registration.data,
+      photos: {
+        front: photoUrl(registration.data.photo_front),
+        back: photoUrl(registration.data.photo_back),
+        side: photoUrl(registration.data.photo_side),
+      },
+    } : null,
+    program: program.data,
+    template: template.data,
+    bodyProfile: bodyProfile.data,
+    schedule: schedule.data ?? [],
+    trackers: trackers.data ?? [],
+    checkins: (checkins.data ?? []).map((checkin) => ({ ...checkin, progressPhotoUrl: photoUrl(checkin.progress_photo_url) })),
+    workouts: (workouts.data ?? []).map((workout) => ({ ...workout, exercises: exercisesByWorkout.get(workout.id) ?? [] })),
+    journals: journals.data ?? [],
+  };
+}
+
 export async function getCoachingTemplateData() {
   const db = createAdminClient();
   const [profiles, registrations, templates] = await Promise.all([
