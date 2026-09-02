@@ -6,52 +6,11 @@ import { requireAdmin } from "@/lib/auth";
 import { isLocale, type Locale } from "@/lib/i18n";
 import { createClient } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/admin-db";
-import { adminBlockTypes, type AdminActionResult } from "@/components/admin/types";
+import { type AdminActionResult } from "@/components/admin/types";
 
 const localeSchema = z.custom<Locale>((value) => typeof value === "string" && isLocale(value));
 const uuidSchema = z.string().uuid();
 const slugSchema = z.string().trim().min(2).max(80).regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers and hyphens only");
-const jsonObjectSchema = z.record(z.string(), z.unknown());
-
-const blockContentSchema = z.object({
-  text: z.string().max(20_000).optional(),
-  label: z.string().max(500).optional(),
-  caption: z.string().max(2_000).optional(),
-  alt: z.string().max(500).optional(),
-  items: z.array(z.string().max(1_000)).max(100).optional(),
-  question: z.string().max(5_000).optional(),
-  options: z.array(z.string().max(1_000)).max(20).optional(),
-  correctOption: z.number().int().min(0).max(19).optional(),
-}).passthrough();
-
-const templatePayloadSchema = z.object({
-  locale: localeSchema,
-  templateId: uuidSchema,
-  versionId: uuidSchema,
-  slug: slugSchema,
-  nameMm: z.string().trim().min(1).max(200),
-  nameEn: z.string().trim().min(1).max(200),
-  descriptionMm: z.string().max(4_000),
-  descriptionEn: z.string().max(4_000),
-  documents: z.array(z.object({
-    id: z.string().min(1),
-    screenKey: z.string().trim().min(1).max(100).regex(/^[a-z0-9_]+$/),
-    dayNumber: z.number().int().min(1).max(48).nullable(),
-    titleMm: z.string().trim().min(1).max(300),
-    titleEn: z.string().trim().min(1).max(300),
-    blocks: z.array(z.object({
-      id: z.string().min(1),
-      blockType: z.enum(adminBlockTypes),
-      titleMm: z.string().max(1_000),
-      titleEn: z.string().max(1_000),
-      contentMm: blockContentSchema,
-      contentEn: blockContentSchema,
-      config: jsonObjectSchema,
-      visible: z.boolean(),
-    })).max(250),
-  })).min(1).max(80),
-});
-
 const programStructurePayloadSchema = z.object({
   locale: localeSchema,
   templateId: uuidSchema,
@@ -145,69 +104,10 @@ export async function createProgramTemplate(
       .single();
     if (versionError) throw versionError;
 
-    const { data: document, error: documentError } = await supabase
-      .from("template_documents")
-      .insert({
-        template_version_id: version.id,
-        screen_key: "baseline",
-        day_number: null,
-        title_mm: "Baseline Test",
-        title_en: "Baseline Test",
-        position: 1,
-      })
-      .select("id")
-      .single();
-    if (documentError) throw documentError;
-
-    const { error: blockError } = await supabase.from("template_blocks").insert({
-      document_id: document.id,
-      parent_id: null,
-      position: 1,
-      block_type: "heading",
-      title_mm: "အစကို မှတ်ထားမယ်",
-      title_en: "Record your starting point",
-      content_mm: { text: "ဒီနေ့ရဲ့အခြေအနေကို မှတ်ထားပြီး ၁၂ ပတ်အကြာ ပြန်ယှဉ်မယ်" },
-      content_en: { text: "Save today’s baseline and compare it again after 12 weeks." },
-      config: { level: 1 },
-      visible: true,
-    });
-    if (blockError) throw blockError;
-
     await writeAudit(viewer.session.id, "template.create", "program_template", template.id, { slug: values.slug });
 
     revalidatePath(adminPath(locale, "/templates"));
     return { ok: true, message: "Template created", templateId: template.id, versionId: version.id };
-  } catch (error) {
-    return { ok: false, message: cleanError(error) };
-  }
-}
-
-export async function saveTemplateDraft(rawPayload: unknown): Promise<AdminActionResult> {
-  const parsed = templatePayloadSchema.safeParse(rawPayload);
-  if (!parsed.success) return { ok: false, message: cleanError(parsed.error) };
-
-  const payload = parsed.data;
-  const viewer = await requireAdmin(payload.locale);
-  const supabase = await createClient();
-
-  try {
-    const { data: versionId, error: saveError } = await supabase.rpc("save_template_draft", {
-      p_template_id: payload.templateId,
-      p_version_id: payload.versionId,
-      p_slug: payload.slug,
-      p_name_mm: payload.nameMm,
-      p_name_en: payload.nameEn,
-      p_description_mm: payload.descriptionMm,
-      p_description_en: payload.descriptionEn,
-      p_documents: payload.documents,
-    });
-    if (saveError) throw saveError;
-    if (typeof versionId !== "string") throw new Error("Template draft was not saved");
-
-    revalidatePath(adminPath(payload.locale, "/templates"));
-    revalidatePath(adminPath(payload.locale, `/templates/${payload.templateId}`));
-    await writeAudit(viewer.session.id, "template.draft.save", "program_template", payload.templateId, { versionId });
-    return { ok: true, message: "Draft saved", templateId: payload.templateId, versionId };
   } catch (error) {
     return { ok: false, message: cleanError(error) };
   }

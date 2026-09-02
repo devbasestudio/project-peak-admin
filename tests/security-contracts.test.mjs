@@ -7,7 +7,6 @@ const read = (path) => readFile(new URL(`../${path}`, import.meta.url), "utf8");
 test("admin mutations use atomic database functions", async () => {
   const source = await read("src/app/admin-actions.ts");
   for (const rpc of [
-    "save_template_draft",
     "save_template_program_structure",
     "publish_template_version_atomic",
     "reject_payment_order_atomic",
@@ -19,8 +18,8 @@ test("home workout program builder exposes the full 12-week hierarchy", async ()
   const page = await read("src/app/(dashboard)/home-workout/templates/[templateId]/page.tsx");
   assert.match(page, /Program Builder/);
   assert.match(page, /Phase၊ Week၊ Session၊ Exercise/);
-  assert.match(page, /လမ်းညွှန် Screens/);
-  assert.match(page, /Baseline စမ်းသပ်ချိန်/);
+  assert.match(page, /App code ထဲမှာ တစ်သတ်မှတ်တည်း/);
+  assert.doesNotMatch(page, /view=content|TemplateBuilder/);
   const builder = await read("src/components/admin/program-structure-builder.tsx");
   assert.match(builder, /length: 48/);
   assert.match(builder, /length: 12/);

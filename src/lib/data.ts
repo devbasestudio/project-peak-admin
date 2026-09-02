@@ -1,10 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/admin-db";
-import { adminBlockTypes, type AdminBlockType, type AdminProgramStructure, type AdminTemplate, type LocalizedBlockContent } from "@/components/admin/types";
-
-function content(value: unknown): LocalizedBlockContent { return value && typeof value === "object" && !Array.isArray(value) ? value as LocalizedBlockContent : {}; }
-function config(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
-function blockType(value: string): AdminBlockType { return adminBlockTypes.includes(value as AdminBlockType) ? value as AdminBlockType : "rich_text"; }
+import { type AdminProgramStructure } from "@/components/admin/types";
 function groupByUser<T extends { user_id: string }>(rows: T[]) {
   const groups = new Map<string, T[]>();
   for (const row of rows) {
@@ -81,28 +77,22 @@ export async function getAdminPayments() {
 
 export async function getAdminTemplates() {
   const db = createAdminClient();
-  const [templates, versions, documents] = await Promise.all([
+  const [templates, versions] = await Promise.all([
     db.from("program_templates").select("id,slug,name_mm,name_en,description_mm,description_en,created_at,updated_at").order("updated_at", { ascending: false }),
     db.from("template_versions").select("id,template_id,version_no,status,published_at,updated_at").order("version_no", { ascending: false }),
-    db.from("template_documents").select("id,template_version_id"),
   ]);
-  const firstError = [templates.error, versions.error, documents.error].find(Boolean); if (firstError) throw firstError;
-  return (templates.data ?? []).map((template) => { const latest = (versions.data ?? []).find((version) => version.template_id === template.id) ?? null; return { ...template, latest, documentCount: latest ? (documents.data ?? []).filter((document) => document.template_version_id === latest.id).length : 0 }; });
+  const firstError = [templates.error, versions.error].find(Boolean); if (firstError) throw firstError;
+  return (templates.data ?? []).map((template) => ({
+    ...template,
+    latest: (versions.data ?? []).find((version) => version.template_id === template.id) ?? null,
+  }));
 }
 
-export async function getAdminTemplate(templateId: string): Promise<AdminTemplate | null> {
+export async function getAdminTemplateHeader(templateId: string) {
   const db = createAdminClient();
-  const [{ data: template, error: templateError }, { data: versions, error: versionsError }] = await Promise.all([
-    db.from("program_templates").select("id,slug,name_mm,name_en,description_mm,description_en").eq("id", templateId).maybeSingle(),
-    db.from("template_versions").select("id,template_id,version_no,status").eq("template_id", templateId).order("version_no", { ascending: false }),
-  ]);
-  if (templateError || versionsError) throw templateError || versionsError; if (!template) return null;
-  const version = (versions ?? []).find((item) => item.status === "draft") ?? (versions ?? []).find((item) => item.status === "published") ?? versions?.[0]; if (!version) return null;
-  const { data: documents, error: documentError } = await db.from("template_documents").select("id,screen_key,day_number,title_mm,title_en,position").eq("template_version_id", version.id).order("position"); if (documentError) throw documentError;
-  const documentIds = (documents ?? []).map((document) => document.id);
-  const blocksResult = documentIds.length ? await db.from("template_blocks").select("id,document_id,position,block_type,title_mm,title_en,content_mm,content_en,config,visible").in("document_id", documentIds).order("position") : { data: [], error: null };
-  if (blocksResult.error) throw blocksResult.error;
-  return { id: template.id, slug: template.slug, nameMm: template.name_mm, nameEn: template.name_en, descriptionMm: template.description_mm ?? "", descriptionEn: template.description_en ?? "", versionId: version.id, versionStatus: version.status as AdminTemplate["versionStatus"], versionNo: version.version_no, documents: (documents ?? []).map((document) => ({ id: document.id, screenKey: document.screen_key, dayNumber: document.day_number, titleMm: document.title_mm, titleEn: document.title_en, blocks: (blocksResult.data ?? []).filter((block) => block.document_id === document.id).map((block) => ({ id: block.id, blockType: blockType(block.block_type), titleMm: block.title_mm ?? "", titleEn: block.title_en ?? "", contentMm: content(block.content_mm), contentEn: content(block.content_en), config: config(block.config), visible: block.visible !== false })) })) };
+  const { data, error } = await db.from("program_templates").select("id,name_mm,name_en").eq("id", templateId).maybeSingle();
+  if (error) throw error;
+  return data ? { id: data.id, nameMm: data.name_mm, nameEn: data.name_en } : null;
 }
 
 export async function getAdminTemplateExercises(templateId: string) {
