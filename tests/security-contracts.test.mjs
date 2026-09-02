@@ -33,6 +33,16 @@ test("home workout program builder exposes the full 12-week hierarchy", async ()
   assert.match(migration, /revoke all .* authenticated/);
 });
 
+test("exercise videos load only after the admin asks to preview one", async () => {
+  const manager = await read("src/components/admin/exercise-video-manager.tsx");
+  assert.match(manager, /activePreview===key/);
+  assert.match(manager, /Video ကြည့်မယ်/);
+  assert.match(manager, /onCanPlay/);
+  assert.match(manager, /onError/);
+  assert.match(manager, /previewAttempt/);
+  assert.doesNotMatch(manager, /<video controls playsInline preload="metadata" src=/);
+});
+
 test("server-action modules only export callable actions and erased types", async () => {
   const source = await read("src/app/website-actions.ts");
   assert.doesNotMatch(source, /export\s+const\s+initialPostState/);

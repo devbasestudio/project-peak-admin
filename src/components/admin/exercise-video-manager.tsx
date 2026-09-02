@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Film, LoaderCircle, Upload } from "lucide-react";
+import { AlertTriangle, Check, Film, LoaderCircle, Play, RotateCcw, Upload } from "lucide-react";
 import { saveExerciseVideoVariant } from "@/app/admin-actions";
 import styles from "./exercise-video-manager.module.css";
 
@@ -24,7 +24,18 @@ export function ExerciseVideoManager({ templateId, library }: { templateId: stri
   const router = useRouter();
   const [busy, setBusy] = useState("");
   const [message, setMessage] = useState("");
+  const [activePreview, setActivePreview] = useState("");
+  const [readyPreview, setReadyPreview] = useState("");
+  const [failedPreview, setFailedPreview] = useState("");
+  const [previewAttempt, setPreviewAttempt] = useState(0);
   const [, startTransition] = useTransition();
+
+  function openPreview(key: string) {
+    setReadyPreview("");
+    setFailedPreview("");
+    setActivePreview(key);
+    setPreviewAttempt((attempt) => attempt + 1);
+  }
 
   async function upload(exerciseSlug: string, role: "primary" | "alternative", file?: File) {
     if (!file) return;
@@ -53,8 +64,21 @@ export function ExerciseVideoManager({ templateId, library }: { templateId: stri
     {message ? <div className={styles.message}><Check size={15}/>{message}</div> : null}
     <div className={styles.grid}>{library.exercises.map((exercise) => <article className={styles.card} key={exercise.id}>
       <div className={styles.exerciseTitle}><span>{String(exercise.position).padStart(2,"0")}</span><div><strong>{exercise.nameEn}</strong><small>{exercise.nameMm}</small></div></div>
-      <div className={styles.slots}>{(["primary","alternative"] as const).map((role) => {const video=exercise.videos.find((item)=>item.role===role);const key=`${exercise.slug}:${role}`;return <div className={styles.slot} key={role}>
-        <div className={styles.preview}>{video?<video controls playsInline preload="metadata" src={video.previewUrl}/>:<Film size={22}/>}</div>
+      <div className={styles.slots}>{(["primary","alternative"] as const).map((role) => {const video=exercise.videos.find((item)=>item.role===role);const key=`${exercise.slug}:${role}`;const isActive=activePreview===key;return <div className={styles.slot} key={role}>
+        <div className={styles.preview}>{video ? isActive ? <>
+          <video
+            key={`${key}:${previewAttempt}`}
+            autoPlay
+            controls
+            playsInline
+            preload="metadata"
+            src={video.previewUrl}
+            onCanPlay={() => setReadyPreview(key)}
+            onError={() => setFailedPreview(key)}
+          />
+          {readyPreview !== key && failedPreview !== key ? <div className={styles.previewStatus}><LoaderCircle className={styles.spin} size={22}/><span>Video ဖွင့်နေပါတယ်…</span></div> : null}
+          {failedPreview === key ? <div className={styles.previewError}><AlertTriangle size={22}/><strong>Video မဖွင့်နိုင်ပါ</strong><button type="button" onClick={() => openPreview(key)}><RotateCcw size={14}/>ပြန်စမ်းမယ်</button></div> : null}
+        </> : <button className={styles.previewButton} type="button" onClick={() => openPreview(key)} aria-label={`${exercise.nameEn} ${role === "primary" ? "primary" : "alternative"} video ကြည့်မယ်`}><span><Play fill="currentColor" size={20}/></span><strong>Video ကြည့်မယ်</strong><small>နှိပ်မှ Video load လုပ်ပါမယ်</small></button> : <div className={styles.emptyPreview}><Film size={22}/><span>Video မရှိသေးပါ</span></div>}</div>
         <div className={styles.slotFoot}><span><strong>{role === "primary" ? "အဓိကနည်း" : "အစားထိုးနည်း"}</strong><small>{video ? "Video ထည့်ပြီး" : "Video မရှိသေး"}</small></span><label>{busy===key?<LoaderCircle className={styles.spin} size={15}/>:<Upload size={15}/>}<input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={Boolean(busy)} onChange={(event)=>void upload(exercise.slug,role,event.target.files?.[0])}/></label></div>
       </div>})}</div>
     </article>)}</div>
