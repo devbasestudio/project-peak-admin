@@ -116,7 +116,19 @@ export function PostEditor({ post }: { post?: BlogPost }) {
         <button type="button" title="Link" onClick={() => replaceSelection((text) => `[${text || "Link စာသား"}](https://)`)} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><Link2 size={17} /></button>
         <span className="ml-auto self-center px-2 text-[10px] font-semibold text-black/40">စာကိုရွေးပြီး format ခလုတ်နှိပ်ပါ</span>
       </div>
-      <textarea ref={contentRef} className={`admin-input rounded-t-none border-t-0 resize-y text-[16px] leading-8 ${fullscreen ? "min-h-[70vh]" : "min-h-[480px]"}`} id="content" name="content" value={content} onChange={(event) => setContent(event.target.value)} placeholder="စာကို ဒီမှာရေးပါ။ Bullet point အတွက် toolbar က list ခလုတ်ကိုနှိပ်ပါ…" />
+      <textarea
+        ref={contentRef}
+        className="admin-input rounded-t-none border-t-0 resize-y text-[16px] leading-8"
+        id="content"
+        name="content"
+        value={content}
+        onChange={(event) => setContent(event.target.value)}
+        placeholder="စာကို ဒီမှာရေးပါ။ Bullet point အတွက် toolbar က list ခလုတ်ကိုနှိပ်ပါ…"
+        style={{
+          height: fullscreen ? "calc(100svh - 230px)" : "clamp(520px, 62vh, 760px)",
+          minHeight: fullscreen ? 420 : 520,
+        }}
+      />
       <div className="mt-2 flex items-center justify-between gap-3 text-xs text-black/38"><span>Heading၊ bullet၊ numbered list၊ bold၊ link နဲ့ quote ရေးနိုင်ပါတယ်။</span><span>{content.length.toLocaleString()} လုံး</span></div>
     </div>
   </section>;
