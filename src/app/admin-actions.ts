@@ -69,7 +69,6 @@ const programStructurePayloadSchema = z.object({
       repsMax: z.number().int().min(0).max(999),
       targetKg: z.number().min(0).max(9999),
       restSeconds: z.number().int().min(0).max(3600),
-      effort: z.string().max(300),
     }).refine((item) => item.repsMax >= item.repsMin, "Maximum reps must be greater than or equal to minimum reps")).max(20),
   })).length(48),
 }).superRefine((payload, context) => {

@@ -79,7 +79,6 @@ export type AdminProgramDayItem = {
   repsMax: number;
   targetKg: number;
   restSeconds: number;
-  effort: string;
 };
 
 export type AdminProgramDay = {

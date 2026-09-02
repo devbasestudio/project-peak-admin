@@ -168,7 +168,7 @@ export async function getAdminTemplateProgram(templateId: string): Promise<Admin
   const dayIds = (dayResult.data ?? []).map((day) => day.id);
   const itemResult = dayIds.length
     ? await db.from("template_day_items")
-      .select("id,template_day_id,template_exercise_id,position,sets,reps_min,reps_max,target_kg,rest_seconds,effort")
+      .select("id,template_day_id,template_exercise_id,position,sets,reps_min,reps_max,target_kg,rest_seconds")
       .in("template_day_id", dayIds)
       .order("position")
     : { data: [], error: null };
@@ -208,7 +208,6 @@ export async function getAdminTemplateProgram(templateId: string): Promise<Admin
         repsMax: item.reps_max,
         targetKg: Number(item.target_kg),
         restSeconds: item.rest_seconds,
-        effort: item.effort ?? "",
       })).filter((item) => item.exerciseSlug),
     })),
   };

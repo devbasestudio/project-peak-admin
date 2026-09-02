@@ -112,7 +112,6 @@ export function ProgramStructureBuilder({ initialProgram }: { initialProgram: Ad
         repsMax: 12,
         targetKg: 0,
         restSeconds: 90,
-        effort: "",
       }],
     }));
   }
@@ -154,7 +153,6 @@ export function ProgramStructureBuilder({ initialProgram }: { initialProgram: Ad
             repsMax: item.repsMax,
             targetKg: item.targetKg,
             restSeconds: item.restSeconds,
-            effort: item.effort,
           })),
         })),
       });
@@ -270,7 +268,6 @@ export function ProgramStructureBuilder({ initialProgram }: { initialProgram: Ad
                       <NumberInput label="Reps အများဆုံး" min={item.repsMin} max={999} value={item.repsMax} onChange={(repsMax) => updateItem(itemIndex, { repsMax })} />
                       <NumberInput label="Target kg" min={0} max={9999} step={0.5} value={item.targetKg} onChange={(targetKg) => updateItem(itemIndex, { targetKg })} />
                       <NumberInput label="နားချိန် · sec" min={0} max={3600} value={item.restSeconds} onChange={(restSeconds) => updateItem(itemIndex, { restSeconds })} />
-                      <label><span>Coach note / Effort</span><input value={item.effort} onChange={(event) => updateItem(itemIndex, { effort: event.target.value })} placeholder="ဥပမာ RPE 8" /></label>
                     </div>
                   </article>
                 );

@@ -19,12 +19,15 @@ test("home workout program builder exposes the full 12-week hierarchy", async ()
   const page = await read("src/app/(dashboard)/home-workout/templates/[templateId]/page.tsx");
   assert.match(page, /Program Builder/);
   assert.match(page, /Phase၊ Week၊ Session၊ Exercise/);
+  assert.match(page, /လမ်းညွှန် Screens/);
+  assert.match(page, /Baseline စမ်းသပ်ချိန်/);
   const builder = await read("src/components/admin/program-structure-builder.tsx");
   assert.match(builder, /length: 48/);
   assert.match(builder, /length: 12/);
   for (const field of ["sets", "repsMin", "repsMax", "targetKg", "restSeconds"]) {
     assert.match(builder, new RegExp(field));
   }
+  assert.doesNotMatch(builder, /Coach note \/ Effort/);
   const migration = await read("supabase/migrations/20260902133838_save_template_program_structure.sql");
   assert.match(migration, /jsonb_array_length\(p_days\) <> 48/);
   assert.match(migration, /clone_template_version/);
