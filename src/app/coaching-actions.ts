@@ -73,3 +73,141 @@ export async function saveCoachingTemplate(input: unknown) {
   revalidatePath("/coaching/templates"); revalidatePath("/coaching/clients"); revalidatePath("/coaching/overview");
   return { ok: true, message: parsed.data.markReady ? "Template save ပြီး client စသုံးနိုင်ပါပြီ" : "အပြောင်းအလဲ သိမ်းပြီးပါပြီ" };
 }
+
+const workoutExerciseSchema = z.object({
+  id: z.coerce.number().int().positive().optional(),
+  exerciseName: z.string().trim().min(1).max(180),
+  targetSets: z.coerce.number().int().min(1).max(20),
+  targetReps: z.string().trim().min(1).max(40),
+});
+
+export async function saveCoachingWorkout(input: unknown) {
+  const parsed = z.object({
+    id: z.coerce.number().int().positive().optional(),
+    userId: z.string().uuid(),
+    date: z.iso.date(),
+    splitName: z.string().trim().min(1).max(120),
+    exercises: z.array(workoutExerciseSchema).min(1).max(30),
+  }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Client၊ ရက်စွဲနဲ့ exercise အချက်အလက် ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
+  const viewer = await requireAdmin();
+  const db = createAdminClient();
+  let workoutId = parsed.data.id;
+  if (workoutId) {
+    const { data, error } = await db.from("coaching_workouts")
+      .update({ user_id: parsed.data.userId, date: parsed.data.date, split_name: parsed.data.splitName })
+      .eq("id", workoutId).select("id").single();
+    if (error || !data) return { ok: false, message: "Workout session ကို update မလုပ်နိုင်ပါ။" };
+  } else {
+    const { data, error } = await db.from("coaching_workouts")
+      .insert({ user_id: parsed.data.userId, date: parsed.data.date, split_name: parsed.data.splitName, completed: false })
+      .select("id").single();
+    if (error || !data) return { ok: false, message: "Workout session အသစ် မသိမ်းနိုင်ပါ။" };
+    workoutId = data.id;
+  }
+  const existing = await db.from("coaching_workout_exercises").select("id").eq("workout_id", workoutId);
+  if (existing.error) return { ok: false, message: "လက်ရှိ exercise တွေကို ဖတ်မရပါ။" };
+  const keptIds: number[] = [];
+  for (const exercise of parsed.data.exercises) {
+    if (exercise.id) {
+      const { error } = await db.from("coaching_workout_exercises").update({
+        exercise_name: exercise.exerciseName,
+        target_sets: exercise.targetSets,
+        target_reps: exercise.targetReps,
+      }).eq("id", exercise.id).eq("workout_id", workoutId);
+      if (error) return { ok: false, message: `${exercise.exerciseName} ကို update မလုပ်နိုင်ပါ။` };
+      keptIds.push(exercise.id);
+    } else {
+      const { data, error } = await db.from("coaching_workout_exercises").insert({
+        workout_id: workoutId,
+        exercise_name: exercise.exerciseName,
+        target_sets: exercise.targetSets,
+        target_reps: exercise.targetReps,
+      }).select("id").single();
+      if (error || !data) return { ok: false, message: `${exercise.exerciseName} ကို မသိမ်းနိုင်ပါ။` };
+      keptIds.push(data.id);
+    }
+  }
+  const removed = (existing.data ?? []).map((row) => row.id).filter((id) => !keptIds.includes(id));
+  if (removed.length) {
+    const { error } = await db.from("coaching_workout_exercises").delete().in("id", removed).eq("workout_id", workoutId);
+    if (error) return { ok: false, message: "ဖယ်ထားတဲ့ exercise ကို update မလုပ်နိုင်ပါ။" };
+  }
+  await writeAudit(viewer.session.id, "coaching.workout.save", "coaching_workout", String(workoutId), { userId: parsed.data.userId, date: parsed.data.date });
+  revalidatePath("/coaching/workouts");
+  revalidatePath(`/coaching/clients/${parsed.data.userId}`);
+  return { ok: true, message: "Workout plan သိမ်းပြီးပါပြီ။ Client app မှာ ဒီရက်အတွက်ပြပါမယ်။", workoutId };
+}
+
+export async function saveCoachingMeal(input: unknown) {
+  const parsed = z.object({
+    id: z.coerce.number().int().positive().optional(),
+    programType: z.string().trim().min(1).max(80),
+    mealType: z.enum(["breakfast", "lunch", "snack", "dinner", "evening"]),
+    foodName: z.string().trim().min(1).max(180),
+    foodNameMm: z.string().trim().max(180).default(""),
+    portion: z.string().trim().max(180).default(""),
+    calories: z.coerce.number().int().min(0).max(10000),
+    protein: z.coerce.number().min(0).max(1000),
+    carbs: z.coerce.number().min(0).max(1000),
+    fat: z.coerce.number().min(0).max(1000),
+    benefits: z.string().trim().max(1000).default(""),
+    sortOrder: z.coerce.number().int().min(0).max(999),
+  }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Meal အချက်အလက်ကို ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
+  const viewer = await requireAdmin();
+  const db = createAdminClient();
+  const row = {
+    program_type: parsed.data.programType, meal_type: parsed.data.mealType,
+    food_name: parsed.data.foodName, food_name_mm: parsed.data.foodNameMm || null,
+    portion: parsed.data.portion || null, calories: parsed.data.calories,
+    protein_g: parsed.data.protein, carbs_g: parsed.data.carbs, fat_g: parsed.data.fat,
+    benefits_text: parsed.data.benefits || null, sort_order: parsed.data.sortOrder,
+  };
+  const result = parsed.data.id
+    ? await db.from("coaching_nutrition_items").update(row).eq("id", parsed.data.id).select("id").single()
+    : await db.from("coaching_nutrition_items").insert(row).select("id").single();
+  if (result.error || !result.data) return { ok: false, message: "Meal ကို သိမ်းမရပါ။ ပြန်စမ်းပေးပါ။" };
+  await writeAudit(viewer.session.id, "coaching.meal.save", "coaching_nutrition_item", String(result.data.id));
+  revalidatePath("/coaching/meals");
+  return { ok: true, message: "Meal plan သိမ်းပြီးပါပြီ။ Client app မှာပြန်ပေါ်ပါမယ်။", mealId: result.data.id };
+}
+
+export async function deleteCoachingMeal(input: unknown) {
+  const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "ဖျက်မယ့် meal မမှန်ပါ။" };
+  const viewer = await requireAdmin();
+  const db = createAdminClient();
+  const { error } = await db.from("coaching_nutrition_items").delete().eq("id", parsed.data.id);
+  if (error) return { ok: false, message: "Meal ကို ဖျက်မရပါ။ အသုံးပြုပြီးသား log ရှိနိုင်ပါတယ်။" };
+  await writeAudit(viewer.session.id, "coaching.meal.delete", "coaching_nutrition_item", String(parsed.data.id));
+  revalidatePath("/coaching/meals");
+  return { ok: true, message: "Meal ကို ဖယ်ပြီးပါပြီ။" };
+}
+
+const feedbackFieldSchema = z.object({
+  key: z.enum(["avg_weight", "progress_photo", "energy_workout", "energy_daily", "motivation", "struggle_notes", "improvement_notes", "upcoming_disruptions", "changes_wanted"]),
+  label: z.string().trim().min(1).max(240),
+  type: z.enum(["number", "image", "rating", "text"]),
+});
+
+export async function saveCoachingFeedbackTemplate(input: unknown) {
+  const parsed = z.object({
+    id: z.coerce.number().int().positive().optional(),
+    name: z.string().trim().min(1).max(160),
+    cadence: z.enum(["weekly", "end"]),
+    active: z.boolean(),
+    fields: z.array(feedbackFieldSchema).min(1).max(20),
+  }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Form name နဲ့ မေးခွန်းစာသားတွေ ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
+  const viewer = await requireAdmin();
+  const db = createAdminClient();
+  const row = { name: parsed.data.name, cadence: parsed.data.cadence, active: parsed.data.active, fields: parsed.data.fields, updated_at: new Date().toISOString() };
+  const result = parsed.data.id
+    ? await db.from("coaching_feedback_form_templates").update(row).eq("id", parsed.data.id).select("id").single()
+    : await db.from("coaching_feedback_form_templates").insert(row).select("id").single();
+  if (result.error || !result.data) return { ok: false, message: "Feedback form ကို သိမ်းမရပါ။" };
+  await writeAudit(viewer.session.id, "coaching.feedback_template.save", "coaching_feedback_form_template", String(result.data.id));
+  revalidatePath("/coaching/feedback-forms");
+  return { ok: true, message: "Feedback form သိမ်းပြီးပါပြီ။", templateId: result.data.id };
+}

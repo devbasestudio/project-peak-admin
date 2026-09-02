@@ -381,3 +381,75 @@ export async function getCoachingTemplateData() {
   const clients = (profiles.data ?? []).filter((profile) => registrationsByUser.has(profile.id)).map((profile) => ({ ...profile, registration: registrationsByUser.get(profile.id) }));
   return { clients, templates: templates.data ?? [] };
 }
+
+async function getEditableCoachingClients() {
+  const db = createAdminClient();
+  const [profiles, registrations, programs] = await Promise.all([
+    db.from("coaching_profiles").select("id,username,email,avatar_url").eq("role", "user").order("username"),
+    db.from("coaching_registrations").select("user_id,name,payment_status").in("payment_status", ["approved", "ready"]),
+    db.from("coaching_programs").select("user_id,program_type,start_date,duration_weeks"),
+  ]);
+  const firstError = [profiles.error, registrations.error, programs.error].find(Boolean);
+  if (firstError) throw firstError;
+  const registrationByUser = new Map((registrations.data ?? []).filter((row) => row.user_id).map((row) => [row.user_id, row]));
+  const programByUser = new Map((programs.data ?? []).map((row) => [row.user_id, row]));
+  return (profiles.data ?? []).filter((profile) => registrationByUser.has(profile.id)).map((profile) => ({
+    ...profile,
+    registration: registrationByUser.get(profile.id) ?? null,
+    program: programByUser.get(profile.id) ?? null,
+  }));
+}
+
+export async function getCoachingWorkoutManagerData() {
+  const db = createAdminClient();
+  const [clients, workouts] = await Promise.all([
+    getEditableCoachingClients(),
+    db.from("coaching_workouts")
+      .select("id,user_id,date,split_name,completed,user_notes,user_feelings,created_at")
+      .order("date", { ascending: false })
+      .limit(1000),
+  ]);
+  if (workouts.error) throw workouts.error;
+  const workoutIds = (workouts.data ?? []).map((row) => row.id);
+  const exercises = workoutIds.length
+    ? await db.from("coaching_workout_exercises")
+      .select("id,workout_id,exercise_name,target_sets,target_reps,actual_weight,actual_reps")
+      .in("workout_id", workoutIds)
+      .order("id")
+    : { data: [], error: null };
+  if (exercises.error) throw exercises.error;
+  const exerciseByWorkout = new Map<number, typeof exercises.data>();
+  for (const exercise of exercises.data ?? []) {
+    const rows = exerciseByWorkout.get(exercise.workout_id) ?? [];
+    rows.push(exercise);
+    exerciseByWorkout.set(exercise.workout_id, rows);
+  }
+  return {
+    clients,
+    workouts: (workouts.data ?? []).map((workout) => ({ ...workout, exercises: exerciseByWorkout.get(workout.id) ?? [] })),
+  };
+}
+
+export async function getCoachingMealManagerData() {
+  const db = createAdminClient();
+  const [items, programs] = await Promise.all([
+    db.from("coaching_nutrition_items")
+      .select("id,program_type,meal_type,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
+      .order("sort_order")
+      .order("id"),
+    db.from("coaching_programs").select("program_type"),
+  ]);
+  const firstError = [items.error, programs.error].find(Boolean);
+  if (firstError) throw firstError;
+  const programTypes = [...new Set(["personal_coaching", ...(programs.data ?? []).map((row) => row.program_type).filter(Boolean)])];
+  return { items: items.data ?? [], programTypes };
+}
+
+export async function getCoachingFeedbackManagerData() {
+  const db = createAdminClient();
+  const { data, error } = await db.from("coaching_feedback_form_templates")
+    .select("id,name,cadence,fields,active,updated_at")
+    .order("created_at");
+  if (error) throw error;
+  return data ?? [];
+}

@@ -4,7 +4,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeftRight, Circle, CreditCard, Dumbbell, ExternalLink, LayoutDashboard, LogOut, Menu, Newspaper, PersonStanding, SlidersHorizontal, Users, X } from "lucide-react";
+import { Apple, ArrowLeftRight, Circle, ClipboardCheck, CreditCard, Dumbbell, ExternalLink, LayoutDashboard, LogOut, Menu, Newspaper, PersonStanding, SlidersHorizontal, Users, X } from "lucide-react";
 import { logout } from "@/app/actions";
 import styles from "./dashboard-shell.module.css";
 
@@ -19,6 +19,9 @@ const sections = [
     { href: "/coaching/overview", label: "Coaching Overview", hint: "ဒီနေ့ track မယ်", icon: PersonStanding },
     { href: "/coaching/payments", label: "1:1 Payments", hint: "Approve / Reject", icon: CreditCard },
     { href: "/coaching/clients", label: "1:1 Clients", hint: "Progress ကြည့်မယ်", icon: Users },
+    { href: "/coaching/workouts", label: "Workout Plans", hint: "ရက်အလိုက် ပြင်မယ်", icon: Dumbbell },
+    { href: "/coaching/meals", label: "Meal Plans", hint: "အစားအစာ ပြင်မယ်", icon: Apple },
+    { href: "/coaching/feedback-forms", label: "Feedback Forms", hint: "မေးခွန်း ပြင်မယ်", icon: ClipboardCheck },
     { href: "/coaching/templates", label: "Custom Templates", hint: "Client plan ဆောက်မယ်", icon: SlidersHorizontal },
   ] },
   { label: "MAIN WEBSITE", items: [{ href: "/website/posts", label: "Blog Posts", hint: "ရေးမယ်၊ Publish မယ်", icon: Newspaper }] },

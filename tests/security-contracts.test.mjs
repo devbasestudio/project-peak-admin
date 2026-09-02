@@ -71,6 +71,20 @@ test("1:1 client progress has a detailed drill-down and repeat-safe demo seed", 
   assert.doesNotMatch(seed, /delete\s+from/i);
 });
 
+test("1:1 admin exposes real workout, meal, and feedback management", async () => {
+  const shell = await read("src/components/dashboard/dashboard-shell.tsx");
+  for (const route of ["/coaching/workouts", "/coaching/meals", "/coaching/feedback-forms"]) assert.match(shell, new RegExp(route));
+  const actions = await read("src/app/coaching-actions.ts");
+  for (const action of ["saveCoachingWorkout", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
+  for (const table of ["coaching_workouts", "coaching_workout_exercises", "coaching_nutrition_items", "coaching_feedback_form_templates"]) assert.match(actions, new RegExp(`from\\(\\\"${table}\\\"\\)`));
+  assert.match(actions, /await requireAdmin\(\)/);
+  const workout = await read("src/components/coaching/workout-manager.tsx");
+  assert.match(workout, /type=\"number\"/);
+  assert.match(workout, /Workout သိမ်းမယ်/);
+  const feedback = await read("src/components/coaching/feedback-form-manager.tsx");
+  assert.match(feedback, /မေးခွန်းစာသား/);
+});
+
 test("server-action modules only export callable actions and erased types", async () => {
   const source = await read("src/app/website-actions.ts");
   assert.doesNotMatch(source, /export\s+const\s+initialPostState/);
