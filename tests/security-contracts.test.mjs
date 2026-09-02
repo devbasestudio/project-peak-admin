@@ -41,6 +41,13 @@ test("exercise videos load only after the admin asks to preview one", async () =
   assert.match(manager, /onError/);
   assert.match(manager, /previewAttempt/);
   assert.doesNotMatch(manager, /<video controls playsInline preload="metadata" src=/);
+
+  const mediaRoute = await read("src/app/api/admin/media/[assetId]/route.ts");
+  assert.match(mediaRoute, /request\.headers\.get\("range"\)/);
+  assert.match(mediaRoute, /headers: range \? \{ Range: range \}/);
+  assert.match(mediaRoute, /new NextResponse\(upstream\.body/);
+  assert.match(mediaRoute, /private, no-store/);
+  assert.doesNotMatch(mediaRoute, /NextResponse\.redirect/);
 });
 
 test("server-action modules only export callable actions and erased types", async () => {
