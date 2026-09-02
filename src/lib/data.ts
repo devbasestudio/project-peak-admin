@@ -296,7 +296,7 @@ function privateCoachingPath(value: string | null | undefined) {
 
 export async function getCoachingClientProgress(clientId: string) {
   const db = createAdminClient();
-  const [profile, registration, program, template, trackers, checkins, bodyProfile, schedule, workouts, journals] = await Promise.all([
+  const [profile, registration, program, template, trackers, checkins, bodyProfile, schedule, workouts, journals, nutritionLogs] = await Promise.all([
     db.from("coaching_profiles").select("id,username,email,avatar_url,onboarding_complete,created_at").eq("id", clientId).eq("role", "user").maybeSingle(),
     db.from("coaching_registrations").select("id,user_id,name,email,phone,age,height,weight,program_name,payment_status,intake_answers,photo_front,photo_back,photo_side,created_at,approved_at,ready_at").eq("user_id", clientId).maybeSingle(),
     db.from("coaching_programs").select("id,user_id,duration_weeks,target_calories,macros_p,macros_c,macros_f,program_type,start_date,created_at,updated_at").eq("user_id", clientId).maybeSingle(),
@@ -307,8 +307,9 @@ export async function getCoachingClientProgress(clientId: string) {
     db.from("coaching_weekly_schedule").select("id,user_id,day_of_week,split_name,is_rest").eq("user_id", clientId).order("day_of_week"),
     db.from("coaching_workouts").select("id,user_id,date,split_name,completed,user_notes,user_feelings,created_at").eq("user_id", clientId).order("date", { ascending: false }).limit(180),
     db.from("coaching_journaling").select("id,user_id,date,diet_status,satisfied_with,difficult_with,created_at").eq("user_id", clientId).order("date", { ascending: false }).limit(60),
+    db.from("coaching_nutrition_logs").select("id,user_id,date,nutrition_item_id,completed,created_at,coaching_nutrition_items(id,meal_type,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g)").eq("user_id", clientId).order("date", { ascending: false }).limit(1000),
   ]);
-  const firstError = [profile.error, registration.error, program.error, template.error, trackers.error, checkins.error, bodyProfile.error, schedule.error, workouts.error, journals.error].find(Boolean);
+  const firstError = [profile.error, registration.error, program.error, template.error, trackers.error, checkins.error, bodyProfile.error, schedule.error, workouts.error, journals.error, nutritionLogs.error].find(Boolean);
   if (firstError) throw firstError;
   if (!profile.data) return null;
 
@@ -363,6 +364,7 @@ export async function getCoachingClientProgress(clientId: string) {
     checkins: (checkins.data ?? []).map((checkin) => ({ ...checkin, progressPhotoUrl: photoUrl(checkin.progress_photo_url) })),
     workouts: (workouts.data ?? []).map((workout) => ({ ...workout, exercises: exercisesByWorkout.get(workout.id) ?? [] })),
     journals: journals.data ?? [],
+    nutritionLogs: nutritionLogs.data ?? [],
   };
 }
 

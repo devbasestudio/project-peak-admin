@@ -174,6 +174,34 @@ begin
     );
   end loop;
 
+  insert into public.coaching_nutrition_items (
+    program_type, meal_type, food_name, food_name_mm, portion,
+    calories, protein_g, carbs_g, fat_g, benefits_text, sort_order
+  )
+  select item.*
+  from (values
+    ('personal_coaching', 'breakfast', 'Egg and oats breakfast', 'ကြက်ဥနှင့် Oats မနက်စာ', '1 plate', 430, 28::numeric, 48::numeric, 14::numeric, 'Protein-focused breakfast for a steady morning.', 10),
+    ('personal_coaching', 'lunch', 'Chicken rice bowl', 'ကြက်သား ထမင်း Lunch Bowl', '1 bowl', 610, 46::numeric, 72::numeric, 16::numeric, 'Balanced training-day meal.', 20),
+    ('personal_coaching', 'snack', 'Greek yogurt and fruit', 'Yogurt နှင့် သစ်သီး', '1 serving', 240, 18::numeric, 30::numeric, 5::numeric, 'Simple protein snack.', 30),
+    ('personal_coaching', 'dinner', 'Fish, vegetables and rice', 'ငါး၊ ဟင်းသီးဟင်းရွက်နှင့် ထမင်း', '1 plate', 560, 42::numeric, 58::numeric, 17::numeric, 'Recovery-focused dinner.', 40)
+  ) as item(program_type, meal_type, food_name, food_name_mm, portion, calories, protein_g, carbs_g, fat_g, benefits_text, sort_order)
+  where not exists (
+    select 1 from public.coaching_nutrition_items existing
+    where existing.program_type = item.program_type and existing.food_name = item.food_name
+  );
+
+  insert into public.coaching_nutrition_logs (user_id, date, nutrition_item_id, completed)
+  select
+    v_user_id,
+    current_date - sample.day_offset,
+    item.id,
+    not (sample.day_offset = 0 and item.meal_type = 'dinner')
+  from generate_series(0, 6) as sample(day_offset)
+  cross join public.coaching_nutrition_items item
+  where item.program_type = 'personal_coaching'
+    and item.food_name in ('Egg and oats breakfast', 'Chicken rice bowl', 'Greek yogurt and fruit', 'Fish, vegetables and rice')
+  on conflict (user_id, date, nutrition_item_id) do update set completed = excluded.completed;
+
   for v_day in 1..10 loop
     insert into public.coaching_journaling (user_id, date, diet_status, satisfied_with, difficult_with)
     values (
