@@ -18,8 +18,7 @@ test("home workout program builder exposes the full 12-week hierarchy", async ()
   const page = await read("src/app/(dashboard)/home-workout/templates/[templateId]/page.tsx");
   assert.match(page, /Program Builder/);
   assert.match(page, /Phase၊ Week၊ Session၊ Exercise/);
-  assert.match(page, /App code ထဲမှာ တစ်သတ်မှတ်တည်း/);
-  assert.doesNotMatch(page, /view=content|TemplateBuilder/);
+  assert.doesNotMatch(page, /view=content|TemplateBuilder|လမ်းညွှန် Screens|Screen Content/);
   const builder = await read("src/components/admin/program-structure-builder.tsx");
   assert.match(builder, /length: 48/);
   assert.match(builder, /length: 12/);

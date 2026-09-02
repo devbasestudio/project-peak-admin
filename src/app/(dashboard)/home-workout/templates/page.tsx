@@ -12,7 +12,7 @@ export default async function TemplatesPage() {
         <div>
           <p className={styles.eyebrow}>{templates.length} ခုရှိ</p>
           <h1 className={styles.pageTitle}>Program Template</h1>
-          <p className={styles.pageDescription}>Phase 1/2၊ Week 1–12၊ Session 48 ခု၊ Exercise Sets/Reps/Rest နဲ့ Videos တွေကို ပြင်နိုင်ပါတယ်။ Customer လမ်းညွှန် Screens တွေကို App ထဲမှာ အဆင်ပြေအောင် တစ်သတ်မှတ်တည်း ထည့်ထားပါတယ်။ Published template ကိုပြင်လျှင် Draft version အသစ်ဖြစ်ပြီး ရှိပြီးသား customer data မပြောင်းပါဘူး။</p>
+          <p className={styles.pageDescription}>Phase 1/2၊ Week 1–12၊ Session 48 ခု၊ Exercise Sets/Reps/Rest နဲ့ Videos တွေကို ပြင်နိုင်ပါတယ်။ Published template ကိုပြင်လျှင် Draft version အသစ်ဖြစ်ပြီး ရှိပြီးသား customer data မပြောင်းပါဘူး။</p>
         </div>
       </div>
       {templates.length ? (

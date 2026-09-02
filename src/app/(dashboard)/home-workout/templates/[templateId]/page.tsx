@@ -28,7 +28,7 @@ export default async function TemplateEditorPage({
         <div>
           <p className={styles.eyebrow}>HOME WORKOUT · TEMPLATE</p>
           <h1>{template.nameMm || template.nameEn}</h1>
-          <p>Week၊ Session၊ Exercise အစီအစဉ်နဲ့ Exercise video တွေကို သီးသန့်ခွဲပြီး ပြင်နိုင်ပါတယ်။ Customer လမ်းညွှန် Screens တွေကို App code ထဲမှာ တစ်သတ်မှတ်တည်း ထည့်ထားပါတယ်။</p>
+          <p>Week၊ Session၊ Exercise အစီအစဉ်နဲ့ Exercise video တွေကို သီးသန့်ခွဲပြီး ပြင်နိုင်ပါတယ်။</p>
         </div>
         <nav aria-label="Template editor sections">
           <Link aria-current={activeView === "program" ? "page" : undefined} data-active={activeView === "program"} href={`/home-workout/templates/${templateId}`}>
