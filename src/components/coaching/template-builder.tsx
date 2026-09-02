@@ -87,6 +87,7 @@ export function CoachingTemplateBuilder({ clients, templates }: { clients: Clien
   const [savedSnapshot, setSavedSnapshot] = useState(snapshot(initialName, initialSections));
   const [message, setMessage] = useState("");
   const [addingTo, setAddingTo] = useState<number | null>(null);
+  const [activeSection, setActiveSection] = useState(0);
   const [activated, setActivated] = useState(firstClientId !== "" && clients[0]?.registration?.payment_status === "ready");
   const [pending, startTransition] = useTransition();
 
@@ -105,6 +106,7 @@ export function CoachingTemplateBuilder({ clients, templates }: { clients: Clien
     setSavedSnapshot(snapshot(nextName, nextSections));
     setActivated(clients.find((client) => client.id === nextClientId)?.registration?.payment_status === "ready");
     setAddingTo(null);
+    setActiveSection(0);
     setMessage("");
   }
 
@@ -193,9 +195,14 @@ export function CoachingTemplateBuilder({ clients, templates }: { clients: Clien
             </label>
           </section>
 
+          <nav className={styles.sectionNav} aria-label="နေ့စဉ် template အချိန်ပိုင်းရွေးရန်">
+            {sections.map((section, index) => <button aria-current={activeSection === index ? "step" : undefined} data-active={activeSection === index} key={section.title} onClick={() => { setActiveSection(index); setAddingTo(null); }} type="button"><span>0{index + 1}</span><strong>{sectionHelp[section.title].mm}</strong><small>{section.fields.length} ခု</small></button>)}
+          </nav>
+
           <div className={styles.workspace}>
             <div className={styles.sections}>
               {sections.map((section, sectionIndex) => {
+                if (sectionIndex !== activeSection) return null;
                 const help = sectionHelp[section.title];
                 return (
                   <section className={styles.section} key={section.title}>

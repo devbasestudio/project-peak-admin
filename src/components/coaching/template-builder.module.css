@@ -172,6 +172,55 @@
   box-shadow: 0 0 0 3px rgba(16, 169, 214, .14);
 }
 
+.sectionNav {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.sectionNav button {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  min-height: 62px;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 13px;
+  color: var(--muted);
+  background: #fff;
+  border: 1px solid var(--line);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sectionNav button[data-active="true"] {
+  color: var(--ink);
+  background: var(--ice);
+  border-color: #8fd7e8;
+  box-shadow: inset 4px 0 0 var(--blue);
+}
+
+.sectionNav button > span {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  background: #eef2f1;
+  font: 800 10px/1 var(--font-geist);
+}
+
+.sectionNav button[data-active="true"] > span {
+  background: #fff;
+  color: #057e9f;
+}
+
+.sectionNav strong {
+  font-size: 13px;
+}
+
+.sectionNav small {
+  font-size: 10px;
+}
+
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 350px;
@@ -678,6 +727,10 @@
   .picker {
     padding-left: 12px;
     padding-right: 12px;
+  }
+
+  .sectionNav {
+    grid-template-columns: 1fr;
   }
 
   .sectionHead {

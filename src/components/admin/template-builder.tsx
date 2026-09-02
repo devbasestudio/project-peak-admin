@@ -392,7 +392,7 @@ export function TemplateBuilder({ initialTemplate, locale }: { initialTemplate: 
   return (
     <div className={styles.builderShell}>
       <aside className={styles.documentRail}>
-        <div className={styles.railHeading}><strong>Screens · {String(template.documents.length).padStart(2, "0")}</strong><button aria-label="Add screen" className={styles.iconButton} onClick={addDocument} type="button"><Plus size={14} /></button></div>
+        <div className={styles.railHeading}><strong>၁ · Screen ရွေးပါ · {String(template.documents.length).padStart(2, "0")}</strong><button aria-label="Screen အသစ်ထည့်မယ်" className={styles.iconButton} onClick={addDocument} type="button"><Plus size={14} /></button></div>
         <div className={styles.documentList}>
           {template.documents.map((document, index) => (
             <button className={styles.documentTab} data-active={document.id === activeDocument.id} key={document.id} onClick={() => { setActiveDocumentId(document.id); setSelectedBlockId(null); }} type="button">
@@ -405,16 +405,17 @@ export function TemplateBuilder({ initialTemplate, locale }: { initialTemplate: 
       <section className={styles.builderCanvas}>
         <div className={styles.builderToolbar}>
           <div>
-            <p className={styles.eyebrow}>Template studio · Version {template.versionNo}</p>
+            <p className={styles.eyebrow}>CONTENT EDITOR · VERSION {template.versionNo}</p>
             <h1>{template.nameEn}</h1>
-            <p>{dirty ? "Unsaved changes" : `${template.versionStatus} version · all changes saved`}</p>
+            <p>{dirty ? "မသိမ်းရသေးတဲ့ ပြင်ဆင်မှုရှိပါတယ်" : template.versionStatus === "published" ? "Published version · ပြင်ပြီး Draft သိမ်းလျှင် version အသစ်ဖြစ်မယ်" : "Draft သိမ်းပြီးပါပြီ"}</p>
           </div>
           <div className={styles.toolbarActions}>
-            <button className={styles.buttonSecondary} disabled={pending || !dirty} onClick={() => void save()} type="button">{pending ? <LoaderCircle className="animate-spin" size={14} /> : <Save size={14} />} Save draft</button>
-            <button className={styles.button} disabled={pending || template.versionStatus === "published"} onClick={publish} type="button"><Send size={14} /> Publish</button>
+            <button className={styles.buttonSecondary} disabled={pending || !dirty} onClick={() => void save()} type="button">{pending ? <LoaderCircle className="animate-spin" size={14} /> : <Save size={14} />} Draft သိမ်းမယ်</button>
+            <button className={styles.button} disabled={pending || template.versionStatus === "published"} onClick={publish} type="button"><Send size={14} /> Customer သုံးရန် Publish</button>
           </div>
         </div>
 
+        <div className={styles.builderStepHeading}><span>၂</span><div><strong>Screen အချက်အလက်</strong><small>Customer မြင်မယ့်ခေါင်းစဉ်နဲ့ Program Day ကိုပြင်ပါ</small></div></div>
         <div className={styles.documentSettings}>
           <div className={styles.field}><label>English screen title</label><input className={styles.input} onChange={(event) => updateActiveDocument((document) => ({ ...document, titleEn: event.target.value }))} value={activeDocument.titleEn} /></div>
           <div className={styles.field}><label>Myanmar screen title</label><input className={styles.input} onChange={(event) => updateActiveDocument((document) => ({ ...document, titleMm: event.target.value }))} value={activeDocument.titleMm} /></div>
@@ -423,7 +424,7 @@ export function TemplateBuilder({ initialTemplate, locale }: { initialTemplate: 
         </div>
 
         <details className={`${styles.blockPalette} ${styles.templateDetails}`}>
-          <summary className={styles.blockPaletteTitle}>Template names and descriptions</summary>
+          <summary className={styles.blockPaletteTitle}>Program အမည်နဲ့ ဖော်ပြချက် ပြင်မယ်</summary>
           <div className={styles.formGrid}>
             <div className={styles.field}><label>English name</label><input className={styles.input} onChange={(event) => mutate({ ...template, nameEn: event.target.value })} value={template.nameEn} /></div>
             <div className={styles.field}><label>Myanmar name</label><input className={styles.input} onChange={(event) => mutate({ ...template, nameMm: event.target.value })} value={template.nameMm} /></div>
@@ -432,6 +433,17 @@ export function TemplateBuilder({ initialTemplate, locale }: { initialTemplate: 
           </div>
         </details>
 
+        <div className={styles.blockPalette}>
+          <div className={styles.builderStepHeading}><span>၃</span><div><strong>လိုအပ်တဲ့ Block ထည့်ပါ</strong><small>နှိပ်လိုက်တာနဲ့ အောက်က content list ထဲဝင်သွားမယ်</small></div></div>
+          <div className={styles.blockTypeGrid}>
+            {adminBlockTypes.map((type) => {
+              const Icon = blockMeta[type].icon;
+              return <button className={styles.blockTypeButton} key={type} onClick={() => addBlock(type)} type="button"><Icon size={17} />{blockMeta[type].label}</button>;
+            })}
+          </div>
+        </div>
+
+        <div className={styles.builderStepHeading}><span>၄</span><div><strong>Content ကိုပြင်ပါ</strong><small>Block တစ်ခုကိုနှိပ်ပြီး မြန်မာ/English စာသားနဲ့ settings ပြင်နိုင်ပါတယ်</small></div></div>
         <DndContext collisionDetection={closestCenter} onDragEnd={onDragEnd} sensors={sensors}>
           <SortableContext items={activeDocument.blocks.map((block) => block.id)} strategy={verticalListSortingStrategy}>
             <div className={styles.blocks}>
@@ -451,24 +463,17 @@ export function TemplateBuilder({ initialTemplate, locale }: { initialTemplate: 
           </SortableContext>
         </DndContext>
 
-        <div className={styles.blockPalette}>
-          <p className={styles.blockPaletteTitle}>Add a block to {activeDocument.titleEn}</p>
-          <div className={styles.blockTypeGrid}>
-            {adminBlockTypes.map((type) => {
-              const Icon = blockMeta[type].icon;
-              return <button className={styles.blockTypeButton} key={type} onClick={() => addBlock(type)} type="button"><Icon size={17} />{blockMeta[type].label}</button>;
-            })}
-          </div>
+        <div className={styles.builderFooterActions}>
           <div className={styles.formActions}>
             <span className={styles.actionMessage} data-ok={!dirty && Boolean(message)}>{message}</span>
-            <button className={styles.buttonDanger} disabled={template.documents.length <= 1} onClick={removeDocument} type="button"><Trash2 size={13} /> Delete screen</button>
+            <button className={styles.buttonDanger} disabled={template.documents.length <= 1} onClick={removeDocument} type="button"><Trash2 size={13} /> ဒီ Screen ကိုဖျက်မယ်</button>
           </div>
         </div>
       </section>
 
       <aside className={styles.previewRail}>
         <div className={styles.previewHeading}>
-          <strong><MonitorSmartphone size={14} /> Customer preview</strong>
+          <strong><MonitorSmartphone size={14} /> Customer မြင်ရမယ့်ပုံစံ</strong>
           <span>{previewLocale.toUpperCase()}</span>
         </div>
         <div className={styles.localeTabs} style={{ marginBottom: 14, paddingTop: 0 }}>
