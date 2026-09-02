@@ -71,16 +71,27 @@ test("1:1 client progress has a detailed drill-down and repeat-safe demo seed", 
   assert.doesNotMatch(seed, /delete\s+from/i);
 });
 
-test("1:1 admin exposes real workout, meal, and feedback management", async () => {
+test("1:1 admin exposes real workout, exercise video, meal, and feedback management", async () => {
   const shell = await read("src/components/dashboard/dashboard-shell.tsx");
-  for (const route of ["/coaching/workouts", "/coaching/meals", "/coaching/feedback-forms"]) assert.match(shell, new RegExp(route));
+  for (const route of ["/coaching/workouts", "/coaching/exercises", "/coaching/meals", "/coaching/feedback-forms"]) assert.match(shell, new RegExp(route));
   const actions = await read("src/app/coaching-actions.ts");
-  for (const action of ["saveCoachingWorkout", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
+  for (const action of ["saveCoachingWorkout", "saveCoachingExerciseLibraryItem", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
   for (const table of ["coaching_workouts", "coaching_workout_exercises", "coaching_nutrition_items", "coaching_feedback_form_templates"]) assert.match(actions, new RegExp(`from\\(\\\"${table}\\\"\\)`));
   assert.match(actions, /await requireAdmin\(\)/);
   const workout = await read("src/components/coaching/workout-manager.tsx");
   assert.match(workout, /type=\"number\"/);
+  assert.match(workout, /<select value=\{exercise\.exerciseName\}/);
+  assert.match(workout, /<optgroup label=\{group\}/);
   assert.match(workout, /Workout သိမ်းမယ်/);
+  const library = await read("src/components/coaching/exercise-library-manager.tsx");
+  assert.match(library, /coaching-exercise/);
+  assert.match(library, /exerciseId/);
+  assert.match(library, /activeVideo===item\.id/);
+  const upload = await read("src/app/api/admin/upload/route.ts");
+  assert.match(upload, /coaching-program-assets/);
+  assert.match(upload, /form_video_url/);
+  assert.match(upload, /requireAdminSession/);
+  assert.match(upload, /isAllowedOrigin/);
   const feedback = await read("src/components/coaching/feedback-form-manager.tsx");
   assert.match(feedback, /မေးခွန်းစာသား/);
 });

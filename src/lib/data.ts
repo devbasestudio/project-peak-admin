@@ -402,14 +402,19 @@ async function getEditableCoachingClients() {
 
 export async function getCoachingWorkoutManagerData() {
   const db = createAdminClient();
-  const [clients, workouts] = await Promise.all([
+  const [clients, workouts, library] = await Promise.all([
     getEditableCoachingClients(),
     db.from("coaching_workouts")
       .select("id,user_id,date,split_name,completed,user_notes,user_feelings,created_at")
       .order("date", { ascending: false })
       .limit(1000),
+    db.from("coaching_exercise_library")
+      .select("id,program_type,split_name,exercise_name,muscle_group,sets_default,reps_default,rest_seconds,form_video_url,sort_order")
+      .order("split_name")
+      .order("sort_order")
+      .order("exercise_name"),
   ]);
-  if (workouts.error) throw workouts.error;
+  if (workouts.error || library.error) throw workouts.error || library.error;
   const workoutIds = (workouts.data ?? []).map((row) => row.id);
   const exercises = workoutIds.length
     ? await db.from("coaching_workout_exercises")
@@ -427,7 +432,19 @@ export async function getCoachingWorkoutManagerData() {
   return {
     clients,
     workouts: (workouts.data ?? []).map((workout) => ({ ...workout, exercises: exerciseByWorkout.get(workout.id) ?? [] })),
+    library: library.data ?? [],
   };
+}
+
+export async function getCoachingExerciseLibraryData() {
+  const db = createAdminClient();
+  const { data, error } = await db.from("coaching_exercise_library")
+    .select("id,program_type,split_name,exercise_name,muscle_group,sets_default,reps_default,rest_seconds,form_video_url,sort_order")
+    .order("split_name")
+    .order("sort_order")
+    .order("exercise_name");
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function getCoachingMealManagerData() {

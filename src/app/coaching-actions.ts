@@ -88,6 +88,9 @@ export async function saveCoachingWorkout(input: unknown) {
     date: z.iso.date(),
     splitName: z.string().trim().min(1).max(120),
     exercises: z.array(workoutExerciseSchema).min(1).max(30),
+  }).superRefine((value, context) => {
+    const names = value.exercises.map((exercise) => exercise.exerciseName.toLocaleLowerCase());
+    if (new Set(names).size !== names.length) context.addIssue({ code: "custom", path: ["exercises"], message: "Exercise တစ်ခုကို ထပ်မထည့်ပါနဲ့" });
   }).safeParse(input);
   if (!parsed.success) return { ok: false, message: "Client၊ ရက်စွဲနဲ့ exercise အချက်အလက် ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
   const viewer = await requireAdmin();
@@ -137,6 +140,41 @@ export async function saveCoachingWorkout(input: unknown) {
   revalidatePath("/coaching/workouts");
   revalidatePath(`/coaching/clients/${parsed.data.userId}`);
   return { ok: true, message: "Workout plan သိမ်းပြီးပါပြီ။ Client app မှာ ဒီရက်အတွက်ပြပါမယ်။", workoutId };
+}
+
+export async function saveCoachingExerciseLibraryItem(input: unknown) {
+  const parsed = z.object({
+    id: z.coerce.number().int().positive().optional(),
+    programType: z.string().trim().min(1).max(80).default("personal_coaching"),
+    splitName: z.string().trim().min(1).max(120),
+    exerciseName: z.string().trim().min(1).max(180),
+    muscleGroup: z.string().trim().max(120).default(""),
+    setsDefault: z.coerce.number().int().min(1).max(20),
+    repsDefault: z.string().trim().min(1).max(40),
+    restSeconds: z.coerce.number().int().min(0).max(3600),
+    sortOrder: z.coerce.number().int().min(0).max(999),
+  }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "Exercise name၊ split၊ sets နဲ့ reps ကို ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
+  const viewer = await requireAdmin();
+  const db = createAdminClient();
+  const row = {
+    program_type: parsed.data.programType,
+    split_name: parsed.data.splitName,
+    exercise_name: parsed.data.exerciseName,
+    muscle_group: parsed.data.muscleGroup || null,
+    sets_default: parsed.data.setsDefault,
+    reps_default: parsed.data.repsDefault,
+    rest_seconds: parsed.data.restSeconds,
+    sort_order: parsed.data.sortOrder,
+  };
+  const result = parsed.data.id
+    ? await db.from("coaching_exercise_library").update(row).eq("id", parsed.data.id).select("id").single()
+    : await db.from("coaching_exercise_library").insert(row).select("id").single();
+  if (result.error || !result.data) return { ok: false, message: result.error?.code === "23505" ? "ဒီ Exercise ရှိပြီးသားပါ။" : "Exercise ကို သိမ်းမရပါ။" };
+  await writeAudit(viewer.session.id, "coaching.exercise.save", "coaching_exercise", String(result.data.id));
+  revalidatePath("/coaching/exercises");
+  revalidatePath("/coaching/workouts");
+  return { ok: true, message: "Exercise Library ထဲသိမ်းပြီးပါပြီ။ Workout dropdown မှာရွေးနိုင်ပါပြီ။", exerciseId: result.data.id };
 }
 
 export async function saveCoachingMeal(input: unknown) {
