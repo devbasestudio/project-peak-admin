@@ -20,8 +20,11 @@ test("journal editor keeps the owner-facing fields and formatting controls", asy
     assert.match(source, new RegExp(`name=\\\"${field}\\\"`));
   }
   assert.match(source, /Full screen ရေးမယ်/);
-  assert.match(source, /calc\(100svh - 230px\)/);
-  assert.match(source, /clamp\(520px, 62vh, 760px\)/);
-  assert.match(source, /<List /);
-  assert.match(source, /<ListOrdered /);
+  assert.match(source, /<RichTextEditor /);
+  const richEditor = await read("src/components/admin/rich-text-editor.tsx");
+  assert.match(richEditor, /calc\(100svh - 230px\)/);
+  assert.match(richEditor, /clamp\(520px, 62vh, 760px\)/);
+  assert.match(richEditor, /insertUnorderedList/);
+  assert.match(richEditor, /insertOrderedList/);
+  assert.doesNotMatch(richEditor, /`\*\*/);
 });

@@ -2,15 +2,16 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
-  ArrowLeft, Bold, Eye, Fullscreen, Heading2, ImagePlus, Italic,
-  Link2, List, ListOrdered, LoaderCircle, Minimize2, Quote, Save,
+  ArrowLeft, Eye, Fullscreen, ImagePlus,
+  LoaderCircle, Minimize2, Save,
 } from "lucide-react";
 import { toast } from "sonner";
 import { createPost, initialPostState, type PostActionState, updatePost } from "@/app/website-actions";
 import type { BlogPost } from "@/lib/blog";
 import { MarkdownContent } from "@/components/admin/markdown-content";
+import { normalizeRichTextContent, RichTextEditor } from "@/components/admin/rich-text-editor";
 
 function slugify(value: string) {
   return value.toLowerCase().trim().replace(/[^a-z0-9\s-]/g, "").replace(/[\s-]+/g, "-").replace(/^-|-$/g, "");
@@ -34,14 +35,13 @@ export function PostEditor({ post }: { post?: BlogPost }) {
   const fallbackSlug = post?.slug ?? "project-peak-journal";
   const [title, setTitle] = useState(post?.title ?? "");
   const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
-  const [content, setContent] = useState(post?.content ?? "");
+  const [content, setContent] = useState(() => normalizeRichTextContent(post?.content ?? ""));
   const [coverUrl, setCoverUrl] = useState(post?.cover_image_url ?? "");
   const [coverPath, setCoverPath] = useState(post?.cover_image_path ?? "");
   const [status, setStatus] = useState<"draft" | "published">(post?.status ?? "draft");
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState(false);
   const [fullscreen, setFullscreen] = useState(false);
-  const contentRef = useRef<HTMLTextAreaElement>(null);
   const slug = post?.slug ?? generatedSlug(title, fallbackSlug);
 
   async function upload(file: File) {
@@ -63,27 +63,6 @@ export function PostEditor({ post }: { post?: BlogPost }) {
     }
   }
 
-  function replaceSelection(transform: (selected: string) => string) {
-    const textarea = contentRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = content.slice(start, end);
-    const replacement = transform(selected);
-    setContent(`${content.slice(0, start)}${replacement}${content.slice(end)}`);
-    requestAnimationFrame(() => {
-      textarea.focus();
-      textarea.setSelectionRange(start, start + replacement.length);
-    });
-  }
-
-  function prefixLines(prefix: string, ordered = false) {
-    replaceSelection((selected) => {
-      const value = selected || "စာရင်းအချက်";
-      return value.split("\n").map((line, index) => `${ordered ? `${index + 1}. ` : prefix}${line.replace(/^(- |\d+\. )/, "")}`).join("\n");
-    });
-  }
-
   if (preview) {
     return <div className="min-h-screen bg-paper">
       <div className="mx-auto max-w-4xl px-4 py-8 sm:px-8">
@@ -100,36 +79,14 @@ export function PostEditor({ post }: { post?: BlogPost }) {
   const editor = <section className={`${fullscreen ? "fixed inset-0 z-[100] overflow-y-auto bg-[#f4f3ed] p-4 sm:p-8" : "mt-5"}`}>
     <div className={fullscreen ? "mx-auto max-w-6xl" : ""}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <label className="admin-label !mb-0" htmlFor="content">စာကိုယ်</label>
+        <label className="admin-label !mb-0" htmlFor="content-editor">စာကိုယ်</label>
         <button type="button" onClick={() => setFullscreen((value) => !value)} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-black/10 bg-white px-3 text-xs font-bold">
           {fullscreen ? <Minimize2 size={15} /> : <Fullscreen size={15} />}{fullscreen ? "ပြန်ချုံ့မယ်" : "Full screen ရေးမယ်"}
         </button>
       </div>
-      <div className="sticky top-0 z-10 flex flex-wrap gap-1 rounded-t-2xl border border-black/10 bg-[#f7f8f7] p-2 shadow-sm" aria-label="စာကိုယ် format toolbar">
-        <button type="button" title="ခေါင်းစဉ်" onClick={() => prefixLines("## ")} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><Heading2 size={17} /></button>
-        <button type="button" title="စာလုံးထူ" onClick={() => replaceSelection((text) => `**${text || "စာလုံးထူ"}**`)} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><Bold size={17} /></button>
-        <button type="button" title="စာလုံးစောင်း" onClick={() => replaceSelection((text) => `_${text || "စာလုံးစောင်း"}_`)} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><Italic size={17} /></button>
-        <span className="mx-1 w-px bg-black/10" />
-        <button type="button" title="Bullet list" onClick={() => prefixLines("- ")} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><List size={18} /></button>
-        <button type="button" title="Numbered list" onClick={() => prefixLines("", true)} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><ListOrdered size={18} /></button>
-        <button type="button" title="Quote" onClick={() => prefixLines("> ")} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><Quote size={17} /></button>
-        <button type="button" title="Link" onClick={() => replaceSelection((text) => `[${text || "Link စာသား"}](https://)`)} className="grid h-10 min-w-10 place-items-center rounded-lg px-2 hover:bg-white"><Link2 size={17} /></button>
-        <span className="ml-auto self-center px-2 text-[10px] font-semibold text-black/40">စာကိုရွေးပြီး format ခလုတ်နှိပ်ပါ</span>
-      </div>
-      <textarea
-        ref={contentRef}
-        className="admin-input rounded-t-none border-t-0 resize-y text-[16px] leading-8"
-        id="content"
-        name="content"
-        value={content}
-        onChange={(event) => setContent(event.target.value)}
-        placeholder="စာကို ဒီမှာရေးပါ။ Bullet point အတွက် toolbar က list ခလုတ်ကိုနှိပ်ပါ…"
-        style={{
-          height: fullscreen ? "calc(100svh - 230px)" : "clamp(520px, 62vh, 760px)",
-          minHeight: fullscreen ? 420 : 520,
-        }}
-      />
-      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-black/38"><span>Heading၊ bullet၊ numbered list၊ bold၊ link နဲ့ quote ရေးနိုင်ပါတယ်။</span><span>{content.length.toLocaleString()} လုံး</span></div>
+      <RichTextEditor value={content} onChange={setContent} fullscreen={fullscreen} />
+      <input type="hidden" name="content" value={content} />
+      <div className="mt-2 flex items-center justify-between gap-3 text-xs text-black/38"><span>Format code တွေမမြင်ရဘဲ စာရွေးပြီး ခလုတ်နှိပ်ရုံပါ။</span><span>{content.replace(/<[^>]*>/g, "").length.toLocaleString()} လုံး</span></div>
     </div>
   </section>;
 

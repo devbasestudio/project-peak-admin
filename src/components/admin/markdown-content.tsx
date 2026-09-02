@@ -1,5 +1,28 @@
 import type { ReactNode } from "react";
 
+const RICH_TAGS = new Set(["P", "BR", "H2", "H3", "STRONG", "EM", "UL", "OL", "LI", "BLOCKQUOTE", "A"]);
+
+function sanitizePreviewHtml(content: string) {
+  if (typeof document === "undefined") return "";
+  const template = document.createElement("template");
+  template.innerHTML = content;
+  template.content.querySelectorAll("script,style,iframe,object,embed,svg,math").forEach((node) => node.remove());
+  template.content.querySelectorAll("*").forEach((element) => {
+    if (!RICH_TAGS.has(element.tagName)) {
+      element.replaceWith(...Array.from(element.childNodes));
+      return;
+    }
+    const href = element.tagName === "A" ? element.getAttribute("href") ?? "" : "";
+    Array.from(element.attributes).forEach((attribute) => element.removeAttribute(attribute.name));
+    if (element.tagName === "A" && /^(https?:\/\/|mailto:)/i.test(href)) {
+      element.setAttribute("href", href);
+      element.setAttribute("target", "_blank");
+      element.setAttribute("rel", "noreferrer");
+    }
+  });
+  return template.innerHTML;
+}
+
 function inline(value: string): ReactNode[] {
   const parts: ReactNode[] = [];
   const pattern = /(\*\*[^*]+\*\*|_[^_]+_|\[[^\]]+\]\((?:https?:\/\/|mailto:)[^)]+\))/g;
@@ -21,6 +44,10 @@ function inline(value: string): ReactNode[] {
 }
 
 export function MarkdownContent({ content, className }: { content: string; className?: string }) {
+  if (/^\s*<(?:p|h2|h3|ul|ol|blockquote|div|strong|em|a|br)\b/i.test(content)) {
+    const safeHtml = sanitizePreviewHtml(content);
+    return <div className={className} dangerouslySetInnerHTML={{ __html: safeHtml }} />;
+  }
   const lines = content.replace(/\r\n/g, "\n").split("\n");
   const blocks: ReactNode[] = [];
   let index = 0;

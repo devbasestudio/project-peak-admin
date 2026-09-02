@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import sanitizeHtml from "sanitize-html";
 import { requireAdmin } from "@/lib/auth";
 import { createClient } from "@/lib/supabase/server";
 import { writeAudit } from "@/lib/admin-db";
@@ -12,7 +13,7 @@ const postSchema = z.object({
   slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Slug ကို english lowercase နဲ့ရေးပါ"),
   language: z.enum(["mm", "en"]),
   excerpt: z.string().trim().max(420),
-  content: z.string().trim(),
+  content: z.string().trim().max(100_000),
   coverImageUrl: z.string().trim().url().or(z.literal("")),
   coverImagePath: z.string().trim(),
   seoTitle: z.string().trim().max(180),
@@ -29,7 +30,14 @@ function parsePost(formData: FormData) {
   const excerpt = String(formData.get("excerpt") ?? "");
   return postSchema.safeParse({
     title, slug: formData.get("slug"), language: formData.get("language"),
-    excerpt, content: formData.get("content"), coverImageUrl: formData.get("coverImageUrl"),
+    excerpt,
+    content: sanitizeHtml(String(formData.get("content") ?? ""), {
+      allowedTags: ["p", "br", "h2", "h3", "strong", "em", "ul", "ol", "li", "blockquote", "a"],
+      allowedAttributes: { a: ["href", "target", "rel"] },
+      allowedSchemes: ["http", "https", "mailto"],
+      transformTags: { a: sanitizeHtml.simpleTransform("a", { target: "_blank", rel: "noreferrer" }) },
+    }),
+    coverImageUrl: formData.get("coverImageUrl"),
     coverImagePath: formData.get("coverImagePath"), seoTitle: title.slice(0, 180), seoDescription: excerpt.slice(0, 320),
     status: formData.get("status"), featured: formData.get("featured") === "on",
   });
