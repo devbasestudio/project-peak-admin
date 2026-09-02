@@ -52,6 +52,35 @@ const templatePayloadSchema = z.object({
   })).min(1).max(80),
 });
 
+const programStructurePayloadSchema = z.object({
+  locale: localeSchema,
+  templateId: uuidSchema,
+  versionId: uuidSchema,
+  days: z.array(z.object({
+    dayNumber: z.number().int().min(1).max(48),
+    dayType: z.enum(["push", "pull", "challenge"]),
+    phase: z.union([z.literal(1), z.literal(2)]),
+    titleMm: z.string().max(300),
+    titleEn: z.string().max(300),
+    items: z.array(z.object({
+      exerciseSlug: z.string().trim().min(1).max(120),
+      sets: z.number().int().min(1).max(20),
+      repsMin: z.number().int().min(0).max(999),
+      repsMax: z.number().int().min(0).max(999),
+      targetKg: z.number().min(0).max(9999),
+      restSeconds: z.number().int().min(0).max(3600),
+      effort: z.string().max(300),
+    }).refine((item) => item.repsMax >= item.repsMin, "Maximum reps must be greater than or equal to minimum reps")).max(20),
+  })).length(48),
+}).superRefine((payload, context) => {
+  const dayNumbers = new Set(payload.days.map((day) => day.dayNumber));
+  if (dayNumbers.size !== 48) context.addIssue({ code: "custom", path: ["days"], message: "Sessions 1 through 48 must all be present" });
+  for (const day of payload.days) {
+    const slugs = new Set(day.items.map((item) => item.exerciseSlug));
+    if (slugs.size !== day.items.length) context.addIssue({ code: "custom", path: ["days", day.dayNumber - 1, "items"], message: `Session ${day.dayNumber} has the same exercise more than once` });
+  }
+});
+
 function cleanError(error: unknown) {
   if (error instanceof z.ZodError) return error.issues[0]?.message ?? "Invalid form data";
   if (error instanceof Error) return error.message;
@@ -180,6 +209,36 @@ export async function saveTemplateDraft(rawPayload: unknown): Promise<AdminActio
     revalidatePath(adminPath(payload.locale, `/templates/${payload.templateId}`));
     await writeAudit(viewer.session.id, "template.draft.save", "program_template", payload.templateId, { versionId });
     return { ok: true, message: "Draft saved", templateId: payload.templateId, versionId };
+  } catch (error) {
+    return { ok: false, message: cleanError(error) };
+  }
+}
+
+export async function saveTemplateProgramStructure(rawPayload: unknown): Promise<AdminActionResult> {
+  const parsed = programStructurePayloadSchema.safeParse(rawPayload);
+  if (!parsed.success) return { ok: false, message: cleanError(parsed.error) };
+
+  const payload = parsed.data;
+  const viewer = await requireAdmin(payload.locale);
+  const supabase = await createClient();
+
+  try {
+    const { data: versionId, error } = await supabase.rpc("save_template_program_structure", {
+      p_template_id: payload.templateId,
+      p_version_id: payload.versionId,
+      p_days: payload.days,
+    });
+    if (error) throw error;
+    if (typeof versionId !== "string") throw new Error("Program structure was not saved");
+
+    await writeAudit(viewer.session.id, "template.program.save", "program_template", payload.templateId, {
+      versionId,
+      sessions: payload.days.length,
+      exercises: payload.days.reduce((total, day) => total + day.items.length, 0),
+    });
+    revalidatePath(adminPath(payload.locale, "/templates"));
+    revalidatePath(adminPath(payload.locale, `/templates/${payload.templateId}`));
+    return { ok: true, message: "Program အစီအစဉ် သိမ်းပြီးပါပြီ", templateId: payload.templateId, versionId };
   } catch (error) {
     return { ok: false, message: cleanError(error) };
   }

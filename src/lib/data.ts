@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/admin-db";
-import { adminBlockTypes, type AdminBlockType, type AdminTemplate, type LocalizedBlockContent } from "@/components/admin/types";
+import { adminBlockTypes, type AdminBlockType, type AdminProgramStructure, type AdminTemplate, type LocalizedBlockContent } from "@/components/admin/types";
 
 function content(value: unknown): LocalizedBlockContent { return value && typeof value === "object" && !Array.isArray(value) ? value as LocalizedBlockContent : {}; }
 function config(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
@@ -135,6 +135,81 @@ export async function getAdminTemplateExercises(templateId: string) {
         titleEn: video.title_en,
         previewUrl: `/api/admin/media/${video.asset_id}`,
       })),
+    })),
+  };
+}
+
+export async function getAdminTemplateProgram(templateId: string): Promise<AdminProgramStructure | null> {
+  const db = createAdminClient();
+  const { data: versions, error: versionError } = await db
+    .from("template_versions")
+    .select("id,status,version_no")
+    .eq("template_id", templateId)
+    .order("version_no", { ascending: false });
+  if (versionError) throw versionError;
+  const version = (versions ?? []).find((item) => item.status === "draft")
+    ?? (versions ?? []).find((item) => item.status === "published")
+    ?? versions?.[0];
+  if (!version) return null;
+
+  const [exerciseResult, dayResult] = await Promise.all([
+    db.from("template_exercises")
+      .select("id,slug,name_mm,name_en,cue_mm,cue_en,equipment_mm,equipment_en,position")
+      .eq("template_version_id", version.id)
+      .eq("is_assessment_only", false)
+      .order("position"),
+    db.from("template_days")
+      .select("id,day_number,day_type,phase,title_mm,title_en")
+      .eq("template_version_id", version.id)
+      .order("day_number"),
+  ]);
+  if (exerciseResult.error || dayResult.error) throw exerciseResult.error || dayResult.error;
+
+  const dayIds = (dayResult.data ?? []).map((day) => day.id);
+  const itemResult = dayIds.length
+    ? await db.from("template_day_items")
+      .select("id,template_day_id,template_exercise_id,position,sets,reps_min,reps_max,target_kg,rest_seconds,effort")
+      .in("template_day_id", dayIds)
+      .order("position")
+    : { data: [], error: null };
+  if (itemResult.error) throw itemResult.error;
+
+  const exercises = (exerciseResult.data ?? []).map((exercise) => ({
+    id: exercise.id,
+    slug: exercise.slug,
+    nameMm: exercise.name_mm,
+    nameEn: exercise.name_en,
+    cueMm: exercise.cue_mm ?? "",
+    cueEn: exercise.cue_en ?? "",
+    equipmentMm: exercise.equipment_mm ?? "",
+    equipmentEn: exercise.equipment_en ?? "",
+    position: exercise.position,
+  }));
+  const exerciseSlugById = new Map(exercises.map((exercise) => [exercise.id, exercise.slug]));
+
+  return {
+    templateId,
+    versionId: version.id,
+    versionStatus: version.status as AdminProgramStructure["versionStatus"],
+    versionNo: version.version_no,
+    exercises,
+    days: (dayResult.data ?? []).map((day) => ({
+      id: day.id,
+      dayNumber: day.day_number,
+      dayType: day.day_type as AdminProgramStructure["days"][number]["dayType"],
+      phase: day.phase === 2 ? 2 : 1,
+      titleMm: day.title_mm ?? "",
+      titleEn: day.title_en ?? "",
+      items: (itemResult.data ?? []).filter((item) => item.template_day_id === day.id).map((item) => ({
+        id: item.id,
+        exerciseSlug: exerciseSlugById.get(item.template_exercise_id) ?? "",
+        sets: item.sets,
+        repsMin: item.reps_min,
+        repsMax: item.reps_max,
+        targetKg: Number(item.target_kg),
+        restSeconds: item.rest_seconds,
+        effort: item.effort ?? "",
+      })).filter((item) => item.exerciseSlug),
     })),
   };
 }
