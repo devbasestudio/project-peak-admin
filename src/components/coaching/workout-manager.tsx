@@ -8,11 +8,11 @@ import { saveCoachingWorkout } from "@/app/coaching-actions";
 import styles from "./content-managers.module.css";
 
 type Client={id:string;username:string;email:string;registration?:{name?:string|null}|null};
-type Exercise={id?:number;exercise_name:string;target_sets:number|null;target_reps:string|null};
+type Exercise={id?:number;shared_exercise_id:string|null;exercise_name:string;target_sets:number|null;target_reps:string|null};
 type Workout={id:number;user_id:string;date:string;split_name:string;completed:boolean;exercises:Exercise[]};
 type LibraryExercise={id:string;category_name:string;name_en:string;name_mm:string;default_sets:number;default_reps_min:number;default_reps_max:number};
-type EditExercise={id?:number;exerciseName:string;targetSets:number;targetReps:string};
-const blankExercise=():EditExercise=>({exerciseName:"",targetSets:3,targetReps:"8-12"});
+type EditExercise={id?:number;libraryExerciseId:string;exerciseName:string;targetSets:number;targetReps:string};
+const blankExercise=():EditExercise=>({libraryExerciseId:"",exerciseName:"",targetSets:3,targetReps:"8-12"});
 
 export function WorkoutManager({clients,workouts,library,today}:{clients:Client[];workouts:Workout[];library:LibraryExercise[];today:string}){
   const router=useRouter();
@@ -30,13 +30,13 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
 
   function selectWorkout(row:Workout){
     setWorkoutId(row.id);setDate(row.date);setSplitName(row.split_name);
-    setExercises(row.exercises.length?row.exercises.map(ex=>({id:ex.id,exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12"})):[blankExercise()]);
+    setExercises(row.exercises.length?row.exercises.map(ex=>({id:ex.id,libraryExerciseId:ex.shared_exercise_id??library.find(item=>item.name_en.toLocaleLowerCase()===ex.exercise_name.toLocaleLowerCase())?.id??"",exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12"})):[blankExercise()]);
     setMessage("");
   }
   function fresh(){setWorkoutId(undefined);setDate(today);setSplitName("Full Body");setExercises([blankExercise()]);setMessage("");}
-  function pickExercise(index:number,name:string){
-    const selected=library.find(item=>item.name_en===name);
-    setExercises(rows=>rows.map((row,position)=>position===index?{...row,exerciseName:name,targetSets:selected?.default_sets??row.targetSets,targetReps:selected?`${selected.default_reps_min}-${selected.default_reps_max}`:row.targetReps}:row));
+  function pickExercise(index:number,libraryExerciseId:string){
+    const selected=library.find(item=>item.id===libraryExerciseId);
+    setExercises(rows=>rows.map((row,position)=>position===index?{...row,libraryExerciseId,exerciseName:selected?.name_en??"",targetSets:selected?.default_sets??row.targetSets,targetReps:selected?`${selected.default_reps_min}-${selected.default_reps_max}`:row.targetReps}:row));
   }
   function save(){
     setMessage("");
@@ -63,12 +63,12 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
           {library.length===0?<div className={styles.help}><strong>Exercise Library မရှိသေးပါ</strong><br/><Link className={styles.link} href="/exercises">Common Library မှာ Exercise အရင်ထည့်ပါ →</Link></div>:null}
           <div className={styles.exerciseList}>{exercises.map((exercise,index)=><div className={styles.exercise} key={exercise.id??`new-${index}`}>
             <span>{String(index+1).padStart(2,"0")}</span>
-            <label><span>Exercise</span><select value={exercise.exerciseName} onChange={event=>pickExercise(index,event.target.value)}><option value="">Exercise ရွေးပါ</option>{exercise.exerciseName&&!library.some(item=>item.name_en===exercise.exerciseName)?<option value={exercise.exerciseName}>{exercise.exerciseName} (အဟောင်း)</option>:null}{libraryByCategory.map(([group,rows])=><optgroup label={group} key={group}>{rows.map(item=><option key={item.id} value={item.name_en}>{item.name_en}{item.name_mm!==item.name_en?` · ${item.name_mm}`:""}</option>)}</optgroup>)}</select></label>
+            <label><span>Exercise</span><select value={exercise.libraryExerciseId} onChange={event=>pickExercise(index,event.target.value)}><option value="">Exercise ရွေးပါ</option>{libraryByCategory.map(([group,rows])=><optgroup label={group} key={group}>{rows.map(item=><option key={item.id} value={item.id}>{item.name_en}{item.name_mm!==item.name_en?` · ${item.name_mm}`:""}</option>)}</optgroup>)}</select></label>
             <label><span>Sets</span><input type="number" min="1" max="20" value={exercise.targetSets} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,targetSets:Number(event.target.value)}:row))}/></label>
             <label><span>Reps</span><input value={exercise.targetReps} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,targetReps:event.target.value}:row))} placeholder="8-12"/></label>
             <button aria-label={`${exercise.exerciseName||"Exercise"} ဖယ်မယ်`} className={styles.iconButton} disabled={exercises.length===1} onClick={()=>setExercises(rows=>rows.filter((_,position)=>position!==index))}><Trash2 size={17}/></button>
           </div>)}</div>
-          <div className={styles.actions}><button className={styles.secondary} disabled={!library.length} onClick={()=>setExercises(rows=>[...rows,blankExercise()])}><Plus size={17}/>Exercise ထည့်မယ်</button><button className={styles.button} disabled={pending||!clientId||!date||!splitName.trim()||exercises.some(exercise=>!exercise.exerciseName.trim())} onClick={save}><Save size={17}/>{pending?"သိမ်းနေတယ်…":"Workout သိမ်းမယ်"}</button></div>
+          <div className={styles.actions}><button className={styles.secondary} disabled={!library.length} onClick={()=>setExercises(rows=>[...rows,blankExercise()])}><Plus size={17}/>Exercise ထည့်မယ်</button><button className={styles.button} disabled={pending||!clientId||!date||!splitName.trim()||exercises.some(exercise=>!exercise.libraryExerciseId)} onClick={save}><Save size={17}/>{pending?"သိမ်းနေတယ်…":"Workout သိမ်းမယ်"}</button></div>
         </div>
       </section>
     </div>}

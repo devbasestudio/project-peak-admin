@@ -76,6 +76,7 @@ export async function saveCoachingTemplate(input: unknown) {
 
 const workoutExerciseSchema = z.object({
   id: z.coerce.number().int().positive().optional(),
+  libraryExerciseId: z.string().uuid(),
   exerciseName: z.string().trim().min(1).max(180),
   targetSets: z.coerce.number().int().min(1).max(20),
   targetReps: z.string().trim().min(1).max(40),
@@ -95,6 +96,12 @@ export async function saveCoachingWorkout(input: unknown) {
   if (!parsed.success) return { ok: false, message: "Client၊ ရက်စွဲနဲ့ exercise အချက်အလက် ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
   const viewer = await requireAdmin();
   const db = createAdminClient();
+  const requestedExerciseIds = [...new Set(parsed.data.exercises.map((exercise) => exercise.libraryExerciseId))];
+  const { data: libraryRows, error: libraryError } = await db.from("shared_exercises")
+    .select("id,name_en")
+    .in("id", requestedExerciseIds);
+  if (libraryError || (libraryRows ?? []).length !== requestedExerciseIds.length) return { ok: false, message: "Common Library ထဲက Exercise ကို ပြန်ရွေးပေးပါ။" };
+  const libraryNameById = new Map((libraryRows ?? []).map((exercise) => [exercise.id, exercise.name_en]));
   let workoutId = parsed.data.id;
   if (workoutId) {
     const { data, error } = await db.from("coaching_workouts")
@@ -114,7 +121,8 @@ export async function saveCoachingWorkout(input: unknown) {
   for (const exercise of parsed.data.exercises) {
     if (exercise.id) {
       const { error } = await db.from("coaching_workout_exercises").update({
-        exercise_name: exercise.exerciseName,
+        shared_exercise_id: exercise.libraryExerciseId,
+        exercise_name: libraryNameById.get(exercise.libraryExerciseId),
         target_sets: exercise.targetSets,
         target_reps: exercise.targetReps,
       }).eq("id", exercise.id).eq("workout_id", workoutId);
@@ -123,7 +131,8 @@ export async function saveCoachingWorkout(input: unknown) {
     } else {
       const { data, error } = await db.from("coaching_workout_exercises").insert({
         workout_id: workoutId,
-        exercise_name: exercise.exerciseName,
+        shared_exercise_id: exercise.libraryExerciseId,
+        exercise_name: libraryNameById.get(exercise.libraryExerciseId),
         target_sets: exercise.targetSets,
         target_reps: exercise.targetReps,
       }).select("id").single();

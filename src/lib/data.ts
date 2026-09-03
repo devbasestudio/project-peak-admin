@@ -431,7 +431,7 @@ export async function getCoachingWorkoutManagerData() {
   const workoutIds = (workouts.data ?? []).map((row) => row.id);
   const exercises = workoutIds.length
     ? await db.from("coaching_workout_exercises")
-      .select("id,workout_id,exercise_name,target_sets,target_reps,actual_weight,actual_reps")
+      .select("id,workout_id,shared_exercise_id,exercise_name,target_sets,target_reps,actual_weight,actual_reps")
       .in("workout_id", workoutIds)
       .order("id")
     : { data: [], error: null };

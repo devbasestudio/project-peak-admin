@@ -82,7 +82,7 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(actions, /await requireAdmin\(\)/);
   const workout = await read("src/components/coaching/workout-manager.tsx");
   assert.match(workout, /type=\"number\"/);
-  assert.match(workout, /<select value=\{exercise\.exerciseName\}/);
+  assert.match(workout, /<select value=\{exercise\.libraryExerciseId\}/);
   assert.match(workout, /<optgroup label=\{group\}/);
   assert.match(workout, /Workout သိမ်းမယ်/);
   const library = await read("src/components/admin/shared-exercise-manager.tsx");
@@ -117,6 +117,8 @@ test("home workout and 1:1 selectors share one categorized exercise source", asy
   const decouple = await read("supabase/migrations/20260903050644_decouple_legacy_coaching_splits.sql");
   assert.match(decouple, /drop trigger if exists shared_exercise_sync_coaching_library/);
   assert.match(decouple, /set split_name = 'Full Body'/);
+  const coachingLink = await read("supabase/migrations/20260903054231_link_coaching_workouts_to_shared_exercises.sql");
+  assert.match(coachingLink, /add column if not exists shared_exercise_id uuid/);
 });
 
 test("server-action modules only export callable actions and erased types", async () => {
