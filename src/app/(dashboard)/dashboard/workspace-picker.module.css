@@ -4,6 +4,12 @@
 .hero h1 { margin: 0; color: #071521; font-size: clamp(44px,6vw,82px); font-weight: 800; line-height: 1.02; letter-spacing: -.065em; }
 .hero > p { margin: 0; color: #596970; font-size: 15px; line-height: 2; }
 .grid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 16px; margin-top: 20px; }
+.commonLibrary { display:grid; grid-template-columns:auto minmax(0,1fr) auto; gap:18px; align-items:center; margin-top:20px; padding:18px 20px; color:#071521; background:#dff7fd; border:1px solid #a9dfec; text-decoration:none; transition:transform .2s ease, box-shadow .2s ease; }
+.commonLibrary:hover { transform:translateY(-2px); box-shadow:0 16px 38px rgba(7,21,33,.08); }
+.commonIcon { display:grid; width:48px; height:48px; place-items:center; color:#fff; background:#071521; }
+.commonLibrary small { display:block; margin-bottom:5px; color:#078eb5; font-family:var(--font-geist-mono,monospace); font-size:9px; font-weight:800; letter-spacing:.16em; }
+.commonLibrary strong { display:block; font-size:16px; }
+.commonAction { display:flex; align-items:center; gap:10px; font-size:12px; font-weight:800; }
 .card { --card-bg:#fff; --card-fg:#071521; --card-muted:#65747a; --card-line:#d6dedf; position: relative; display: flex; min-height: 430px; flex-direction: column; overflow: hidden; padding: 24px; color: var(--card-fg); background: var(--card-bg); border: 1px solid var(--card-line); text-decoration: none; transition: transform .22s ease, box-shadow .22s ease; }
 .card[data-tone="cyan"] { --card-bg:#10acd5; --card-line:#10acd5; --card-muted:rgba(7,21,33,.62); }
 .card[data-tone="dark"] { --card-bg:#071521; --card-fg:#fff; --card-line:#071521; --card-muted:rgba(255,255,255,.54); }
@@ -18,4 +24,4 @@
 .cardAction { display:flex; min-height:58px; align-items:center; justify-content:space-between; gap:16px; border-top:1px solid currentColor; font-size:12px; }
 .help { margin:20px 0 0; color:#728087; font-size:11px; text-align:center; }
 @media (max-width: 900px) { .hero { grid-template-columns:1fr; gap:24px; } .grid { grid-template-columns:1fr; } .card { min-height:310px; } .cardBody { padding-top:48px; } }
-@media (max-width: 560px) { .hero h1 { font-size:40px; } .hero > p { font-size:13px; line-height:1.8; } .card { min-height:290px; padding:20px; } }
+@media (max-width: 560px) { .hero h1 { font-size:40px; } .hero > p { font-size:13px; line-height:1.8; } .commonLibrary { grid-template-columns:auto minmax(0,1fr); padding:16px; } .commonAction { grid-column:2; } .card { min-height:290px; padding:20px; } }

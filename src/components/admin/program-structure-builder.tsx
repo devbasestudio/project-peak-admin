@@ -59,6 +59,15 @@ export function ProgramStructureBuilder({ initialProgram }: { initialProgram: Ad
   const activeDay = program.days.find((day) => day.dayNumber === selectedDayNumber) ?? weekDays[0];
   const weekPhase = weekDays[0]?.phase ?? 1;
   const totalItems = program.days.reduce((total, day) => total + day.items.length, 0);
+  const exerciseGroups = useMemo(() => {
+    const groups = new Map<string, AdminProgramStructure["exercises"]>();
+    for (const exercise of program.exercises) {
+      const rows = groups.get(exercise.categoryName) ?? [];
+      rows.push(exercise);
+      groups.set(exercise.categoryName, rows);
+    }
+    return [...groups.entries()];
+  }, [program.exercises]);
   const phaseWeeks = ([1, 2] as const).map((phase) => ({
     phase,
     weeks: Array.from({ length: 12 }, (_, index) => index + 1).filter((week) => {
@@ -107,11 +116,11 @@ export function ProgramStructureBuilder({ initialProgram }: { initialProgram: Ad
       items: [...day.items, {
         id: crypto.randomUUID(),
         exerciseSlug: exercise.slug,
-        sets: 3,
-        repsMin: 8,
-        repsMax: 12,
+        sets: exercise.defaultSets,
+        repsMin: exercise.defaultRepsMin,
+        repsMax: exercise.defaultRepsMax,
         targetKg: 0,
-        restSeconds: 90,
+        restSeconds: exercise.defaultRestSeconds,
       }],
     }));
   }
@@ -254,7 +263,16 @@ export function ProgramStructureBuilder({ initialProgram }: { initialProgram: Ad
                   <article className={styles.exerciseCard} key={item.id}>
                     <div className={styles.exerciseTop}>
                       <span className={styles.exerciseNumber}>{String(itemIndex + 1).padStart(2, "0")}</span>
-                      <label><span>Exercise</span><select value={item.exerciseSlug} onChange={(event) => updateItem(itemIndex, { exerciseSlug: event.target.value })}>{program.exercises.map((candidate) => <option key={candidate.slug} value={candidate.slug}>{candidate.nameEn} · {candidate.nameMm}</option>)}</select></label>
+                      <label><span>Exercise</span><select value={item.exerciseSlug} onChange={(event) => {
+                        const selected = program.exercises.find((candidate) => candidate.slug === event.target.value);
+                        updateItem(itemIndex, selected ? {
+                          exerciseSlug: selected.slug,
+                          sets: selected.defaultSets,
+                          repsMin: selected.defaultRepsMin,
+                          repsMax: selected.defaultRepsMax,
+                          restSeconds: selected.defaultRestSeconds,
+                        } : { exerciseSlug: event.target.value });
+                      }}>{exerciseGroups.map(([category, candidates]) => <optgroup label={category} key={category}>{candidates.map((candidate) => <option key={candidate.slug} value={candidate.slug}>{candidate.nameEn} · {candidate.nameMm}</option>)}</optgroup>)}</select></label>
                       <div className={styles.rowActions}>
                         <button aria-label="အပေါ်ရွှေ့မယ်" disabled={itemIndex === 0} onClick={() => moveExercise(itemIndex, -1)} type="button"><ArrowUp size={15} /></button>
                         <button aria-label="အောက်ရွှေ့မယ်" disabled={itemIndex === activeDay.items.length - 1} onClick={() => moveExercise(itemIndex, 1)} type="button"><ArrowDown size={15} /></button>

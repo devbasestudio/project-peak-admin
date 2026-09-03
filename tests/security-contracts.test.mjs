@@ -73,9 +73,11 @@ test("1:1 client progress has a detailed drill-down and repeat-safe demo seed", 
 
 test("1:1 admin exposes real workout, exercise video, meal, and feedback management", async () => {
   const shell = await read("src/components/dashboard/dashboard-shell.tsx");
-  for (const route of ["/coaching/workouts", "/coaching/exercises", "/coaching/meals", "/coaching/feedback-forms"]) assert.match(shell, new RegExp(route));
+  for (const route of ["/exercises", "/coaching/workouts", "/coaching/meals", "/coaching/feedback-forms"]) assert.match(shell, new RegExp(route));
+  assert.doesNotMatch(shell, /href: "\/coaching\/exercises"/);
   const actions = await read("src/app/coaching-actions.ts");
-  for (const action of ["saveCoachingWorkout", "saveCoachingExerciseLibraryItem", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
+  for (const action of ["saveCoachingWorkout", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
+  assert.doesNotMatch(actions, /saveCoachingExerciseLibraryItem/);
   for (const table of ["coaching_workouts", "coaching_workout_exercises", "coaching_nutrition_items", "coaching_feedback_form_templates"]) assert.match(actions, new RegExp(`from\\(\\\"${table}\\\"\\)`));
   assert.match(actions, /await requireAdmin\(\)/);
   const workout = await read("src/components/coaching/workout-manager.tsx");
@@ -83,17 +85,36 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(workout, /<select value=\{exercise\.exerciseName\}/);
   assert.match(workout, /<optgroup label=\{group\}/);
   assert.match(workout, /Workout သိမ်းမယ်/);
-  const library = await read("src/components/coaching/exercise-library-manager.tsx");
-  assert.match(library, /coaching-exercise/);
-  assert.match(library, /exerciseId/);
-  assert.match(library, /activeVideo===item\.id/);
+  const library = await read("src/components/admin/shared-exercise-manager.tsx");
+  assert.match(library, /shared-exercise-video/);
+  assert.match(library, /Category အသစ်ထည့်မယ်/);
+  assert.match(library, /Home Workout နဲ့ 1:1 Workout နှစ်ခုလုံး/);
+  assert.match(library, /primary", "alternative/);
   const upload = await read("src/app/api/admin/upload/route.ts");
-  assert.match(upload, /coaching-program-assets/);
-  assert.match(upload, /form_video_url/);
+  assert.match(upload, /shared-exercise-video/);
+  assert.match(upload, /shared_exercise_videos/);
+  assert.match(upload, /program-media/);
   assert.match(upload, /requireAdminSession/);
   assert.match(upload, /isAllowedOrigin/);
   const feedback = await read("src/components/coaching/feedback-form-manager.tsx");
   assert.match(feedback, /မေးခွန်းစာသား/);
+});
+
+test("home workout and 1:1 selectors share one categorized exercise source", async () => {
+  const data = await read("src/lib/data.ts");
+  assert.match(data, /from\("shared_exercises"\)/);
+  assert.match(data, /from\("exercise_categories"\)/);
+  const builder = await read("src/components/admin/program-structure-builder.tsx");
+  const workout = await read("src/components/coaching/workout-manager.tsx");
+  assert.match(builder, /<optgroup label=\{category\}/);
+  assert.match(workout, /<optgroup label=\{group\}/);
+  const templatePage = await read("src/app/(dashboard)/home-workout/templates/[templateId]/page.tsx");
+  assert.match(templatePage, /href="\/exercises"/);
+  assert.doesNotMatch(templatePage, /ExerciseVideoManager|view=videos/);
+  const migration = await read("supabase/migrations/20260903033218_create_shared_exercise_library.sql");
+  for (const table of ["exercise_categories", "shared_exercises", "shared_exercise_videos"]) assert.match(migration, new RegExp(`create table if not exists public\\.${table}`));
+  assert.match(migration, /sync_shared_exercise_to_coaching_library/);
+  assert.match(migration, /Service role authorization required/);
 });
 
 test("server-action modules only export callable actions and erased types", async () => {

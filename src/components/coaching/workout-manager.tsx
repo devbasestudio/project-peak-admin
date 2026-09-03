@@ -10,7 +10,7 @@ import styles from "./content-managers.module.css";
 type Client={id:string;username:string;email:string;registration?:{name?:string|null}|null};
 type Exercise={id?:number;exercise_name:string;target_sets:number|null;target_reps:string|null};
 type Workout={id:number;user_id:string;date:string;split_name:string;completed:boolean;exercises:Exercise[]};
-type LibraryExercise={id:number;split_name:string;exercise_name:string;sets_default:number|null;reps_default:string|null};
+type LibraryExercise={id:string;category_name:string;name_en:string;name_mm:string;default_sets:number;default_reps_min:number;default_reps_max:number};
 type EditExercise={id?:number;exerciseName:string;targetSets:number;targetReps:string};
 const blankExercise=():EditExercise=>({exerciseName:"",targetSets:3,targetReps:"8-12"});
 
@@ -25,7 +25,7 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
   const [ok,setOk]=useState(false);
   const [pending,startTransition]=useTransition();
   const visible=useMemo(()=>workouts.filter(row=>row.user_id===clientId),[clientId,workouts]);
-  const libraryBySplit=useMemo(()=>{const groups=new Map<string,LibraryExercise[]>();for(const item of library){const rows=groups.get(item.split_name)??[];rows.push(item);groups.set(item.split_name,rows);}return [...groups.entries()];},[library]);
+  const libraryByCategory=useMemo(()=>{const groups=new Map<string,LibraryExercise[]>();for(const item of library){const rows=groups.get(item.category_name)??[];rows.push(item);groups.set(item.category_name,rows);}return [...groups.entries()];},[library]);
   const selectedClient=clients.find(row=>row.id===clientId);
 
   function selectWorkout(row:Workout){
@@ -35,8 +35,8 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
   }
   function fresh(){setWorkoutId(undefined);setDate(today);setSplitName("Full Body");setExercises([blankExercise()]);setMessage("");}
   function pickExercise(index:number,name:string){
-    const selected=library.find(item=>item.exercise_name===name);
-    setExercises(rows=>rows.map((row,position)=>position===index?{...row,exerciseName:name,targetSets:selected?.sets_default??row.targetSets,targetReps:selected?.reps_default??row.targetReps}:row));
+    const selected=library.find(item=>item.name_en===name);
+    setExercises(rows=>rows.map((row,position)=>position===index?{...row,exerciseName:name,targetSets:selected?.default_sets??row.targetSets,targetReps:selected?`${selected.default_reps_min}-${selected.default_reps_max}`:row.targetReps}:row));
   }
   function save(){
     setMessage("");
@@ -57,13 +57,13 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
         <div className={styles.sessionList}>{visible.length?visible.map(row=><button className={styles.session} data-active={row.id===workoutId} key={row.id} onClick={()=>selectWorkout(row)}><time>{row.date}</time><span><strong>{row.split_name}</strong><small>{row.exercises.length} exercises · {row.completed?"ပြီး":"လုပ်ရန်"}</small></span><Dumbbell size={17}/></button>):<div className={styles.empty}>ဒီ Client အတွက် session မရှိသေးပါ။ “အသစ်” နှိပ်ပြီး စပါ။</div>}</div>
       </aside>
       <section className={styles.panel}>
-        <div className={styles.panelHead}><div><p className={styles.kicker}>{workoutId?"EDIT SESSION":"NEW SESSION"}</p><h2>{workoutId?"Workout ပြင်မယ်":"Workout အသစ်ထည့်မယ်"}</h2></div><Link className={styles.link} href="/coaching/exercises">Exercise + Video စီမံမယ် →</Link></div>
+        <div className={styles.panelHead}><div><p className={styles.kicker}>{workoutId?"EDIT SESSION":"NEW SESSION"}</p><h2>{workoutId?"Workout ပြင်မယ်":"Workout အသစ်ထည့်မယ်"}</h2></div><Link className={styles.link} href="/exercises">Common Exercises ပြင်မယ် →</Link></div>
         <div className={styles.panelBody}>
           <div className={styles.row}><label className={styles.field}><span>ဆော့မယ့်ရက်</span><input type="date" value={date} onChange={event=>setDate(event.target.value)}/></label><label className={styles.field}><span>Session နာမည်</span><input value={splitName} onChange={event=>setSplitName(event.target.value)} placeholder="ဥပမာ Push A"/></label></div>
-          {library.length===0?<div className={styles.help}><strong>Exercise Library မရှိသေးပါ</strong><br/><Link className={styles.link} href="/coaching/exercises">Library မှာ Exercise အရင်ထည့်ပါ →</Link></div>:null}
+          {library.length===0?<div className={styles.help}><strong>Exercise Library မရှိသေးပါ</strong><br/><Link className={styles.link} href="/exercises">Common Library မှာ Exercise အရင်ထည့်ပါ →</Link></div>:null}
           <div className={styles.exerciseList}>{exercises.map((exercise,index)=><div className={styles.exercise} key={exercise.id??`new-${index}`}>
             <span>{String(index+1).padStart(2,"0")}</span>
-            <label><span>Exercise</span><select value={exercise.exerciseName} onChange={event=>pickExercise(index,event.target.value)}><option value="">Exercise ရွေးပါ</option>{exercise.exerciseName&&!library.some(item=>item.exercise_name===exercise.exerciseName)?<option value={exercise.exerciseName}>{exercise.exerciseName} (အဟောင်း)</option>:null}{libraryBySplit.map(([group,rows])=><optgroup label={group} key={group}>{rows.map(item=><option key={item.id} value={item.exercise_name}>{item.exercise_name}</option>)}</optgroup>)}</select></label>
+            <label><span>Exercise</span><select value={exercise.exerciseName} onChange={event=>pickExercise(index,event.target.value)}><option value="">Exercise ရွေးပါ</option>{exercise.exerciseName&&!library.some(item=>item.name_en===exercise.exerciseName)?<option value={exercise.exerciseName}>{exercise.exerciseName} (အဟောင်း)</option>:null}{libraryByCategory.map(([group,rows])=><optgroup label={group} key={group}>{rows.map(item=><option key={item.id} value={item.name_en}>{item.name_en}{item.name_mm!==item.name_en?` · ${item.name_mm}`:""}</option>)}</optgroup>)}</select></label>
             <label><span>Sets</span><input type="number" min="1" max="20" value={exercise.targetSets} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,targetSets:Number(event.target.value)}:row))}/></label>
             <label><span>Reps</span><input value={exercise.targetReps} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,targetReps:event.target.value}:row))} placeholder="8-12"/></label>
             <button aria-label={`${exercise.exerciseName||"Exercise"} ဖယ်မယ်`} className={styles.iconButton} disabled={exercises.length===1} onClick={()=>setExercises(rows=>rows.filter((_,position)=>position!==index))}><Trash2 size={17}/></button>

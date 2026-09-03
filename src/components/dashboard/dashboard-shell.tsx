@@ -9,7 +9,10 @@ import { logout } from "@/app/actions";
 import styles from "./dashboard-shell.module.css";
 
 const sections = [
-  { label: "အဓိက", items: [{ href: "/dashboard", label: "ခြုံငုံကြည့်မယ်", hint: "ဒီနေ့လုပ်စရာ", icon: LayoutDashboard }] },
+  { label: "အဓိက", items: [
+    { href: "/dashboard", label: "ခြုံငုံကြည့်မယ်", hint: "Website ရွေးမယ်", icon: LayoutDashboard },
+    { href: "/exercises", label: "Exercises", hint: "Program အားလုံးသုံးမယ်", icon: Film },
+  ] },
   { label: "HOME WORKOUT", items: [
     { href: "/home-workout/payments", label: "ငွေပေးချေမှု", hint: "Approve / Reject", icon: CreditCard },
     { href: "/home-workout/customers", label: "သင်တန်းသားများ", hint: "Access စီမံမယ်", icon: Users },
@@ -20,7 +23,6 @@ const sections = [
     { href: "/coaching/payments", label: "1:1 Payments", hint: "Approve / Reject", icon: CreditCard },
     { href: "/coaching/clients", label: "1:1 Clients", hint: "Progress ကြည့်မယ်", icon: Users },
     { href: "/coaching/workouts", label: "Workout Plans", hint: "ရက်အလိုက် ပြင်မယ်", icon: Dumbbell },
-    { href: "/coaching/exercises", label: "Exercise Videos", hint: "Library + Video", icon: Film },
     { href: "/coaching/meals", label: "Meal Plans", hint: "အစားအစာ ပြင်မယ်", icon: Apple },
     { href: "/coaching/feedback-forms", label: "Feedback Forms", hint: "မေးခွန်း ပြင်မယ်", icon: ClipboardCheck },
     { href: "/coaching/templates", label: "Custom Templates", hint: "Client plan ဆောက်မယ်", icon: SlidersHorizontal },

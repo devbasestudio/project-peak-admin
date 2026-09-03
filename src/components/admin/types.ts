@@ -8,6 +8,11 @@ export type AdminProgramExercise = {
   equipmentMm: string;
   equipmentEn: string;
   position: number;
+  categoryName: string;
+  defaultSets: number;
+  defaultRepsMin: number;
+  defaultRepsMax: number;
+  defaultRestSeconds: number;
 };
 
 export type AdminProgramDayItem = {

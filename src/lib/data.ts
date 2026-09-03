@@ -142,18 +142,24 @@ export async function getAdminTemplateProgram(templateId: string): Promise<Admin
     ?? versions?.[0];
   if (!version) return null;
 
-  const [exerciseResult, dayResult] = await Promise.all([
+  const [templateExerciseResult, sharedExerciseResult, categoryResult, dayResult] = await Promise.all([
     db.from("template_exercises")
       .select("id,slug,name_mm,name_en,cue_mm,cue_en,equipment_mm,equipment_en,position")
       .eq("template_version_id", version.id)
       .eq("is_assessment_only", false)
       .order("position"),
+    db.from("shared_exercises")
+      .select("id,category_id,slug,name_mm,name_en,cue_mm,cue_en,equipment_mm,equipment_en,default_sets,default_reps_min,default_reps_max,default_rest_seconds,sort_order")
+      .order("sort_order")
+      .order("name_en"),
+    db.from("exercise_categories").select("id,name,sort_order").order("sort_order").order("name"),
     db.from("template_days")
       .select("id,day_number,day_type,phase,title_mm,title_en")
       .eq("template_version_id", version.id)
       .order("day_number"),
   ]);
-  if (exerciseResult.error || dayResult.error) throw exerciseResult.error || dayResult.error;
+  const firstError = [templateExerciseResult.error, sharedExerciseResult.error, categoryResult.error, dayResult.error].find(Boolean);
+  if (firstError) throw firstError;
 
   const dayIds = (dayResult.data ?? []).map((day) => day.id);
   const itemResult = dayIds.length
@@ -164,7 +170,8 @@ export async function getAdminTemplateProgram(templateId: string): Promise<Admin
     : { data: [], error: null };
   if (itemResult.error) throw itemResult.error;
 
-  const exercises = (exerciseResult.data ?? []).map((exercise) => ({
+  const categoryNameById = new Map((categoryResult.data ?? []).map((category) => [category.id, category.name]));
+  const exercises = (sharedExerciseResult.data ?? []).map((exercise) => ({
     id: exercise.id,
     slug: exercise.slug,
     nameMm: exercise.name_mm,
@@ -173,9 +180,14 @@ export async function getAdminTemplateProgram(templateId: string): Promise<Admin
     cueEn: exercise.cue_en ?? "",
     equipmentMm: exercise.equipment_mm ?? "",
     equipmentEn: exercise.equipment_en ?? "",
-    position: exercise.position,
+    position: exercise.sort_order,
+    categoryName: categoryNameById.get(exercise.category_id) ?? "General",
+    defaultSets: exercise.default_sets,
+    defaultRepsMin: exercise.default_reps_min,
+    defaultRepsMax: exercise.default_reps_max,
+    defaultRestSeconds: exercise.default_rest_seconds,
   }));
-  const exerciseSlugById = new Map(exercises.map((exercise) => [exercise.id, exercise.slug]));
+  const exerciseSlugById = new Map((templateExerciseResult.data ?? []).map((exercise) => [exercise.id, exercise.slug]));
 
   return {
     templateId,
@@ -402,19 +414,20 @@ async function getEditableCoachingClients() {
 
 export async function getCoachingWorkoutManagerData() {
   const db = createAdminClient();
-  const [clients, workouts, library] = await Promise.all([
+  const [clients, workouts, library, categories] = await Promise.all([
     getEditableCoachingClients(),
     db.from("coaching_workouts")
       .select("id,user_id,date,split_name,completed,user_notes,user_feelings,created_at")
       .order("date", { ascending: false })
       .limit(1000),
-    db.from("coaching_exercise_library")
-      .select("id,program_type,split_name,exercise_name,muscle_group,sets_default,reps_default,rest_seconds,form_video_url,sort_order")
-      .order("split_name")
+    db.from("shared_exercises")
+      .select("id,category_id,slug,name_mm,name_en,muscle_group,default_sets,default_reps_min,default_reps_max,default_rest_seconds,sort_order")
       .order("sort_order")
-      .order("exercise_name"),
+      .order("name_en"),
+    db.from("exercise_categories").select("id,name,sort_order").order("sort_order"),
   ]);
-  if (workouts.error || library.error) throw workouts.error || library.error;
+  const firstError = [workouts.error, library.error, categories.error].find(Boolean);
+  if (firstError) throw firstError;
   const workoutIds = (workouts.data ?? []).map((row) => row.id);
   const exercises = workoutIds.length
     ? await db.from("coaching_workout_exercises")
@@ -432,19 +445,32 @@ export async function getCoachingWorkoutManagerData() {
   return {
     clients,
     workouts: (workouts.data ?? []).map((workout) => ({ ...workout, exercises: exerciseByWorkout.get(workout.id) ?? [] })),
-    library: library.data ?? [],
+    library: (library.data ?? []).map((exercise) => ({
+      ...exercise,
+      category_name: (categories.data ?? []).find((category) => category.id === exercise.category_id)?.name ?? "General",
+    })),
   };
 }
 
-export async function getCoachingExerciseLibraryData() {
+export async function getSharedExerciseLibraryData() {
   const db = createAdminClient();
-  const { data, error } = await db.from("coaching_exercise_library")
-    .select("id,program_type,split_name,exercise_name,muscle_group,sets_default,reps_default,rest_seconds,form_video_url,sort_order")
-    .order("split_name")
-    .order("sort_order")
-    .order("exercise_name");
-  if (error) throw error;
-  return data ?? [];
+  const [categories, exercises, videos] = await Promise.all([
+    db.from("exercise_categories").select("id,name,sort_order").order("sort_order").order("name"),
+    db.from("shared_exercises").select("id,category_id,slug,name_mm,name_en,cue_mm,cue_en,equipment_mm,equipment_en,muscle_group,default_sets,default_reps_min,default_reps_max,default_rest_seconds,unilateral,sort_order").order("sort_order").order("name_en"),
+    db.from("shared_exercise_videos").select("id,exercise_id,role,asset_id").order("role"),
+  ]);
+  const firstError = [categories.error, exercises.error, videos.error].find(Boolean);
+  if (firstError) throw firstError;
+  return {
+    categories: categories.data ?? [],
+    exercises: (exercises.data ?? []).map((exercise) => ({
+      ...exercise,
+      videos: (videos.data ?? []).filter((video) => video.exercise_id === exercise.id).map((video) => ({
+        ...video,
+        preview_url: `/api/admin/media/${video.asset_id}`,
+      })),
+    })),
+  };
 }
 
 export async function getCoachingMealManagerData() {

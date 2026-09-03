@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ArrowUpRight, Dumbbell, Newspaper, PersonStanding } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Dumbbell, Film, Newspaper, PersonStanding } from "lucide-react";
 import styles from "./workspace-picker.module.css";
 
 const workspaces = [
@@ -41,6 +41,11 @@ export default function DashboardPage() {
       <div><p className={styles.eyebrow}>PROJECT PEAK · ADMIN</p><h1>ဘယ် Website ကို<br />စီမံချင်ပါသလဲ?</h1></div>
       <p>Website တစ်ခုရွေးပြီးတာနဲ့ အဲဒီ Website နဲ့ သက်ဆိုင်တဲ့ menu တွေပဲ မြင်ရပါမယ်။ နောက်တစ်ခုကိုပြောင်းချင်ရင် “Website ပြောင်းမယ်” ကိုနှိပ်ပါ။</p>
     </header>
+    <Link href="/exercises" className={styles.commonLibrary}>
+      <span className={styles.commonIcon}><Film size={22} /></span>
+      <span><small>COMMON LIBRARY · HOME WORKOUT + 1:1</small><strong>Exercise နဲ့ Video ကို တစ်နေရာတည်းမှာ စီမံမယ်</strong></span>
+      <span className={styles.commonAction}>Exercises ဖွင့်မယ် <ArrowRight size={18} /></span>
+    </Link>
     <section className={styles.grid} aria-label="Project Peak websites">
       {workspaces.map(({ code, title, subtitle, description, href, action, icon: Icon, tone }) => <Link href={href} className={styles.card} data-tone={tone} key={href}>
         <div className={styles.cardTop}><span>{code}</span><span className={styles.icon}><Icon size={24} /></span></div>
