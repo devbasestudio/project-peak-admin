@@ -9,6 +9,7 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  output: "standalone",
   poweredByHeader: false,
   images: {
     remotePatterns: [{ protocol: "https", hostname: "gzcostlnfwuvtihuzice.supabase.co" }],
