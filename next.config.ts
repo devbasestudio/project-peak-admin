@@ -9,7 +9,7 @@ const contentSecurityPolicy = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  output: "standalone",
+  ...(process.env.VERCEL ? {} : { output: "standalone" as const }),
   poweredByHeader: false,
   images: {
     remotePatterns: [{ protocol: "https", hostname: "gzcostlnfwuvtihuzice.supabase.co" }],
