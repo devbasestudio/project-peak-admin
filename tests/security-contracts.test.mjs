@@ -113,8 +113,10 @@ test("home workout and 1:1 selectors share one categorized exercise source", asy
   assert.doesNotMatch(templatePage, /ExerciseVideoManager|view=videos/);
   const migration = await read("supabase/migrations/20260903033218_create_shared_exercise_library.sql");
   for (const table of ["exercise_categories", "shared_exercises", "shared_exercise_videos"]) assert.match(migration, new RegExp(`create table if not exists public\\.${table}`));
-  assert.match(migration, /sync_shared_exercise_to_coaching_library/);
   assert.match(migration, /Service role authorization required/);
+  const decouple = await read("supabase/migrations/20260903050644_decouple_legacy_coaching_splits.sql");
+  assert.match(decouple, /drop trigger if exists shared_exercise_sync_coaching_library/);
+  assert.match(decouple, /set split_name = 'Full Body'/);
 });
 
 test("server-action modules only export callable actions and erased types", async () => {
