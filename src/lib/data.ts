@@ -38,9 +38,9 @@ export async function getCentralOverview() {
 export async function getAdminCustomers() {
   const db = createAdminClient();
   const [profiles, programs, orders] = await Promise.all([
-    db.from("profiles").select("id,display_name,preferred_locale,created_at").order("created_at", { ascending: false }).limit(1000),
-    db.from("programs").select("id,user_id,status,name_mm,name_en,assigned_at").order("assigned_at", { ascending: false }).limit(1000),
-    db.from("payment_orders").select("id,user_id,status,reference_code,created_at").order("created_at", { ascending: false }).limit(1000),
+    db.from("profiles").select("id,display_name,preferred_locale,created_at").order("created_at", { ascending: false }).limit(300),
+    db.from("programs").select("id,user_id,status,name_mm,name_en,assigned_at").order("assigned_at", { ascending: false }).limit(300),
+    db.from("payment_orders").select("id,user_id,status,reference_code,created_at").order("created_at", { ascending: false }).limit(300),
   ]);
   const firstError = [profiles.error, programs.error, orders.error].find(Boolean); if (firstError) throw firstError;
   const programByUser = new Map((programs.data ?? []).map((program) => [program.user_id, program]));
@@ -56,10 +56,10 @@ export async function getAdminPayments() {
   const db = createAdminClient();
   const [orders, profiles, versions, templates, proofs] = await Promise.all([
     db.from("payment_orders").select("id,user_id,reference_code,status,amount_minor,currency,customer_note,submitted_at,approved_at,created_at").order("created_at", { ascending: false }).limit(500),
-    db.from("profiles").select("id,display_name").limit(1000),
+    db.from("profiles").select("id,display_name").limit(500),
     db.from("template_versions").select("id,template_id,version_no,name_en,status").eq("status", "published").order("version_no", { ascending: false }),
     db.from("program_templates").select("id,name_en"),
-    db.from("payment_proofs").select("id,order_id,storage_path,mime_type,created_at").order("created_at", { ascending: false }).limit(1000),
+    db.from("payment_proofs").select("id,order_id,storage_path,mime_type,created_at").order("created_at", { ascending: false }).limit(500),
   ]);
   const firstError = [orders.error, profiles.error, versions.error, templates.error, proofs.error].find(Boolean); if (firstError) throw firstError;
   const signedEntries = await Promise.all((proofs.data ?? []).map(async (proof) => {

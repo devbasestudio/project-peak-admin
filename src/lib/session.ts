@@ -1,5 +1,6 @@
 import "server-only";
 import { randomBytes } from "node:crypto";
+import { cache } from "react";
 import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/admin-db";
@@ -19,7 +20,7 @@ export function createSessionToken() {
   return randomBytes(32).toString("base64url");
 }
 
-export async function getCurrentSession(): Promise<AdminSession | null> {
+export const getCurrentSession = cache(async (): Promise<AdminSession | null> => {
   const token = (await cookies()).get(SESSION_COOKIE)?.value;
   if (!token) return null;
   const db = createAdminClient();
@@ -31,7 +32,7 @@ export async function getCurrentSession(): Promise<AdminSession | null> {
     .maybeSingle();
   if (error || !data) return null;
   return data as AdminSession;
-}
+});
 
 export async function requireAdminSession() {
   const session = await getCurrentSession();

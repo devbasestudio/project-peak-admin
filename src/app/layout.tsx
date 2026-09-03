@@ -4,8 +4,8 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 const archivo = localFont({ src: "./fonts/archivo-variable.ttf", variable: "--font-archivo", display: "swap" });
-const geist = localFont({ src: "./fonts/geist-variable.ttf", variable: "--font-geist", display: "swap" });
-const geistMono = localFont({ src: "./fonts/geist-mono-variable.ttf", variable: "--font-geist-mono", display: "swap" });
+const geist = localFont({ src: "./fonts/geist-variable.ttf", variable: "--font-geist", display: "swap", preload: false });
+const geistMono = localFont({ src: "./fonts/geist-mono-variable.ttf", variable: "--font-geist-mono", display: "swap", preload: false });
 const myanmar = localFont({ src: "./fonts/myanmar-sagar.ttf", variable: "--font-myanmar", display: "swap" });
 
 export const metadata: Metadata = {

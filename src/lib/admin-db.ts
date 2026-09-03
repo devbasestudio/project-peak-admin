@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient } from "@supabase/supabase-js";
+import { cache } from "react";
 import { serverEnv } from "@/lib/env";
 
 export function createAdminClient() {
@@ -9,12 +10,12 @@ export function createAdminClient() {
   });
 }
 
-export async function getAuditActorId() {
+export const getAuditActorId = cache(async () => {
   const db = createAdminClient();
   const { data, error } = await db.rpc("central_admin_actor_id");
   if (error || !data) throw new Error("No Project Peak admin account is configured");
   return data as string;
-}
+});
 
 export async function writeAudit(
   sessionId: string,

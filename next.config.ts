@@ -10,11 +10,19 @@ const contentSecurityPolicy = [
 
 const nextConfig: NextConfig = {
   ...(process.env.VERCEL ? {} : { output: "standalone" as const }),
+  outputFileTracingRoot: process.cwd(),
+  turbopack: { root: process.cwd() },
   poweredByHeader: false,
   images: {
+    minimumCacheTTL: 60 * 60 * 24 * 7,
+    deviceSizes: [360, 390, 640, 768, 1024, 1280, 1536, 1920],
+    imageSizes: [32, 48, 64, 96, 128, 256, 384],
     remotePatterns: [{ protocol: "https", hostname: "gzcostlnfwuvtihuzice.supabase.co" }],
   },
-  experimental: { serverActions: { bodySizeLimit: "8mb" } },
+  experimental: {
+    optimizePackageImports: ["lucide-react"],
+    serverActions: { bodySizeLimit: "8mb" },
+  },
   async headers() {
     return [{ source: "/(.*)", headers: [
       { key: "X-Content-Type-Options", value: "nosniff" },
