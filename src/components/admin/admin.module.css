@@ -821,6 +821,28 @@
   font-size: 9px;
 }
 
+.reviewForm .button {
+  color: #fff;
+  background-color: #071521;
+  border-color: #071521;
+  box-shadow: 0 7px 18px rgba(7, 21, 33, .14);
+  opacity: 1;
+  visibility: visible;
+}
+
+.reviewForm .button:hover:not(:disabled) {
+  color: #071521;
+  background-color: #11add5;
+  border-color: #11add5;
+}
+
+.reviewForm .button:disabled {
+  color: rgba(255, 255, 255, .86);
+  background-color: #59656d;
+  border-color: #59656d;
+  opacity: .72;
+}
+
 .field {
   display: grid;
   min-width: 0;
