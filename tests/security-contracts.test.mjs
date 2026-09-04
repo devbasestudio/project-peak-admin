@@ -98,6 +98,12 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(upload, /isAllowedOrigin/);
   const feedback = await read("src/components/coaching/feedback-form-manager.tsx");
   assert.match(feedback, /မေးခွန်းစာသား/);
+  assert.match(feedback, /မေးခွန်းထည့်မယ်/);
+  for (const type of ["short_text", "long_text", "number", "rating", "yes_no", "image"]) assert.match(feedback, new RegExp(type));
+  assert.match(feedback, /setFields\(\(rows\) => rows\.filter/);
+  assert.match(feedback, /function move/);
+  const coachingItems = shell.match(/href: "\/coaching\//g) || [];
+  assert.equal(coachingItems.length, 4);
 });
 
 test("home workout and 1:1 selectors share one categorized exercise source", async () => {

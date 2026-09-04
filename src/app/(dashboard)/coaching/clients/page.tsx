@@ -2,11 +2,13 @@ import Link from "next/link";
 import { ArrowUpRight, Eye } from "lucide-react";
 import { getCoachingClients } from "@/lib/data";
 import styles from "@/components/admin/admin.module.css";
+import { CoachingToolsNav } from "@/components/coaching/coaching-tools-nav";
 
 export default async function CoachingClientsPage() {
   const clients = await getCoachingClients();
   return (
     <>
+      <CoachingToolsNav group="clients" active="/coaching/clients" />
       <div className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>{clients.length} ယောက် · LIVE PROGRESS</p>

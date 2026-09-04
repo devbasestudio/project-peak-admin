@@ -198,9 +198,10 @@ export async function deleteCoachingMeal(input: unknown) {
 }
 
 const feedbackFieldSchema = z.object({
-  key: z.enum(["avg_weight", "progress_photo", "energy_workout", "energy_daily", "motivation", "struggle_notes", "improvement_notes", "upcoming_disruptions", "changes_wanted"]),
+  key: z.string().trim().min(1).max(80).regex(/^[a-z0-9_]+$/),
   label: z.string().trim().min(1).max(240),
-  type: z.enum(["number", "image", "rating", "text"]),
+  type: z.enum(["short_text", "long_text", "number", "rating", "yes_no", "image"]),
+  required: z.boolean().default(false),
 });
 
 export async function saveCoachingFeedbackTemplate(input: unknown) {
@@ -209,7 +210,10 @@ export async function saveCoachingFeedbackTemplate(input: unknown) {
     name: z.string().trim().min(1).max(160),
     cadence: z.enum(["weekly", "end"]),
     active: z.boolean(),
-    fields: z.array(feedbackFieldSchema).min(1).max(20),
+    fields: z.array(feedbackFieldSchema).min(1).max(20).refine(
+      (fields) => new Set(fields.map((field) => field.key)).size === fields.length,
+      "Duplicate field keys are not allowed",
+    ),
   }).safeParse(input);
   if (!parsed.success) return { ok: false, message: "Form name နဲ့ မေးခွန်းစာသားတွေ ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
   const viewer = await requireAdmin();

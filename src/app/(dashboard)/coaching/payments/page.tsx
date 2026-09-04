@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react";
 import { reviewCoachingPayment } from "@/app/coaching-actions";
 import { getCoachingPayments } from "@/lib/data";
 import styles from "@/components/admin/admin.module.css";
+import { CoachingToolsNav } from "@/components/coaching/coaching-tools-nav";
 
 function answers(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -23,6 +24,7 @@ export default async function CoachingPaymentsPage() {
   const pending = rows.filter((row) => row.payment_status === "pending").length;
   return (
     <>
+      <CoachingToolsNav group="clients" active="/coaching/payments" />
       <div className={styles.pageHeader}>
         <div>
           <p className={styles.eyebrow}>{pending} ခု စစ်ဆေးဖို့ကျန်</p>
