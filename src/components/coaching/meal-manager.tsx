@@ -9,6 +9,7 @@ import styles from "./content-managers.module.css";
 type MealType = "breakfast" | "lunch" | "snack" | "dinner" | "evening";
 type Meal = {
   id: number;
+  user_id: string | null;
   program_type: string;
   meal_type: MealType;
   food_name: string;
@@ -23,6 +24,7 @@ type Meal = {
 };
 type MealForm = {
   id?: number;
+  userId: string;
   programType: "personal_coaching";
   mealType: MealType;
   foodName: string;
@@ -35,6 +37,12 @@ type MealForm = {
   benefits: string;
   sortOrder: number;
 };
+type Client = {
+  id: string;
+  username: string;
+  email: string;
+  registration?: { name?: string | null } | null;
+};
 
 const labels: Record<MealType, string> = {
   breakfast: "မနက်စာ",
@@ -44,7 +52,8 @@ const labels: Record<MealType, string> = {
   evening: "ညပိုင်း",
 };
 const mealTypes = Object.keys(labels) as MealType[];
-const blank = (mealType: MealType): MealForm => ({
+const blank = (userId: string, mealType: MealType): MealForm => ({
+  userId,
   programType: "personal_coaching",
   mealType,
   foodName: "",
@@ -58,21 +67,25 @@ const blank = (mealType: MealType): MealForm => ({
   sortOrder: 0,
 });
 
-export function MealManager({ items }: { items: Meal[] }) {
+export function MealManager({ clients, items }: { clients: Client[]; items: Meal[] }) {
   const router = useRouter();
+  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [mealType, setMealType] = useState<MealType>("breakfast");
-  const [form, setForm] = useState<MealForm>(blank("breakfast"));
+  const [form, setForm] = useState<MealForm>(blank(clients[0]?.id ?? "", "breakfast"));
   const [message, setMessage] = useState("");
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
-  const visible = useMemo(
-    () => items.filter((item) => item.meal_type === mealType),
-    [items, mealType],
-  );
+  const clientItems = useMemo(() => items.filter((item) => item.user_id === clientId && item.meal_type === mealType), [clientId, items, mealType]);
+  const defaultItems = useMemo(() => items.filter((item) => item.user_id === null && item.meal_type === mealType), [items, mealType]);
+  const usingDefaults = clientItems.length === 0 && defaultItems.length > 0;
+  const visible = clientItems.length ? clientItems : defaultItems;
+  const selectedClient = clients.find((client) => client.id === clientId);
+  const selectedClientName = selectedClient?.registration?.name || selectedClient?.username || selectedClient?.email || "Client ရွေးပါ";
 
   function edit(item: Meal) {
     setForm({
-      id: item.id,
+      id: item.user_id ? item.id : undefined,
+      userId: clientId,
       programType: "personal_coaching",
       mealType: item.meal_type,
       foodName: item.food_name,
@@ -88,8 +101,8 @@ export function MealManager({ items }: { items: Meal[] }) {
     setMessage("");
   }
 
-  function fresh(nextType = mealType) {
-    setForm(blank(nextType));
+  function fresh(nextType = mealType, nextClientId = clientId) {
+    setForm(blank(nextClientId, nextType));
     setMessage("");
   }
 
@@ -108,9 +121,9 @@ export function MealManager({ items }: { items: Meal[] }) {
   }
 
   function remove() {
-    if (!form.id || !window.confirm("ဒီ meal ကို တကယ်ဖယ်မလား? Client တွေမှာ မပေါ်တော့ပါ။")) return;
+    if (!form.id || !window.confirm(`ဒီ meal ကို ${selectedClientName} ရဲ့ Plan ကနေ တကယ်ဖယ်မလား?`)) return;
     startTransition(async () => {
-      const result = await deleteCoachingMeal({ id: form.id });
+      const result = await deleteCoachingMeal({ id: form.id, userId: clientId });
       setOk(result.ok);
       setMessage(result.message);
       if (result.ok) {
@@ -126,38 +139,44 @@ export function MealManager({ items }: { items: Meal[] }) {
         <div>
           <p>1:1 COACHING · MEAL LIBRARY</p>
           <h1>စားသောက်မှု Plan</h1>
-          <span>ဒီမှာထည့်ထားတဲ့ အစားအစာတွေကို 1:1 Client app ရဲ့ Meals စာမျက်နှာမှာ အသုံးပြုပါမယ်။</span>
+          <span>Client တစ်ယောက်ရွေးပြီး သူ့အတွက် သီးသန့်စားသောက်မှု Plan ကို ပြင်နိုင်ပါတယ်။</span>
         </div>
         {message ? <div className={styles.status} data-ok={ok}>{message}</div> : null}
       </header>
 
       <ol className={styles.steps} aria-label="Meal plan အသုံးပြုနည်း">
-        <li><b>1</b><span><strong>အချိန်ရွေးပါ</strong><small>မနက်စာ၊ နေ့လယ်စာ စသည်</small></span></li>
-        <li><b>2</b><span><strong>အသစ်ထည့် သို့မဟုတ် ပြင်ပါ</strong><small>ရှိပြီးသား card ကိုနှိပ်လည်းရပါတယ်</small></span></li>
-        <li><b>3</b><span><strong>အချက်အလက်သိမ်းပါ</strong><small>Client app မှာ အလိုအလျောက်ပေါ်ပါမယ်</small></span></li>
+        <li><b>1</b><span><strong>Client ရွေးပါ</strong><small>{selectedClient?.email || "Approved Client ကိုရွေးပါ"}</small></span></li>
+        <li><b>2</b><span><strong>အချိန်နဲ့ Meal ရွေးပါ</strong><small>မနက်စာ၊ နေ့လယ်စာ စသည်</small></span></li>
+        <li><b>3</b><span><strong>ပြင်ပြီး သိမ်းပါ</strong><small>{selectedClientName} ရဲ့ app မှာပေါ်ပါမယ်</small></span></li>
       </ol>
 
       <section className={`${styles.panel} ${styles.mealTypePanel}`}>
-        <div className={styles.mealTypeIntro}>
-          <span>အခု ပြင်နေသည်</span>
-          <strong>1:1 Coaching Meal Library</strong>
+        <label className={`${styles.field} ${styles.clientPicker}`}>
+          <span>ဘယ် Client အတွက်လဲ?</span>
+          <select value={clientId} onChange={(event) => { const nextClientId = event.target.value; setClientId(nextClientId); fresh(mealType, nextClientId); }}>
+            {clients.length ? clients.map((client) => <option key={client.id} value={client.id}>{client.registration?.name || client.username || client.email} · {client.email}</option>) : <option value="">Approved Client မရှိသေးပါ</option>}
+          </select>
+        </label>
+        <div className={styles.mealTypeControls}>
+          <div className={styles.mealTypeIntro}><span>အခု ပြင်နေသည်</span><strong>{selectedClientName}</strong></div>
+          <nav className={styles.mealTabs} aria-label="အစားအစာ အချိန်ရွေးမယ်">
+            {mealTypes.map((type) => (
+              <button type="button" data-active={mealType === type} key={type} onClick={() => chooseMealType(type)}>
+                {mealType === type ? <Check size={15} /> : null}{labels[type]}
+              </button>
+            ))}
+          </nav>
         </div>
-        <nav className={styles.mealTabs} aria-label="အစားအစာ အချိန်ရွေးမယ်">
-          {mealTypes.map((type) => (
-            <button type="button" data-active={mealType === type} key={type} onClick={() => chooseMealType(type)}>
-              {mealType === type ? <Check size={15} /> : null}{labels[type]}
-            </button>
-          ))}
-        </nav>
       </section>
 
-      <div className={`${styles.layout} ${styles.mealLayout}`}>
+      {clients.length === 0 ? <div className={styles.empty}>Payment approve လုပ်ထားတဲ့ 1:1 Client မရှိသေးပါ။ Clients မှာ approve အရင်လုပ်ပေးပါ။</div> : <div className={`${styles.layout} ${styles.mealLayout}`}>
         <section className={styles.panel}>
           <div className={styles.panelHead}>
             <div><p className={styles.kicker}>{labels[mealType]}</p><h2>ထည့်ထားတဲ့ အစားအစာ</h2></div>
             <button type="button" className={styles.secondary} onClick={() => fresh()}><Plus size={16} />အသစ်ထည့်မယ်</button>
           </div>
           <div className={styles.panelBody}>
+            {usingDefaults ? <div className={styles.help}><strong>Default meal ကိုပြထားပါတယ်</strong><br />Card ကိုနှိပ်ပြီး သိမ်းလိုက်ရင် {selectedClientName} အတွက် သီးသန့် copy ဖြစ်သွားပါမယ်။</div> : null}
             <div className={styles.mealGrid}>
               {visible.length ? visible.map((item) => (
                 <button type="button" className={styles.mealCard} key={item.id} onClick={() => edit(item)}>
@@ -195,11 +214,11 @@ export function MealManager({ items }: { items: Meal[] }) {
             <label className={styles.field}><span>Coach ရှင်းပြချက် / Benefits</span><textarea value={form.benefits} onChange={(event) => setForm({ ...form, benefits: event.target.value })} placeholder="ဒီ meal ကို ဘာကြောင့်ရွေးထားတာလဲ ရေးနိုင်ပါတယ်" /></label>
             <div className={styles.actions}>
               {form.id ? <button type="button" className={styles.danger} disabled={pending} onClick={remove}><Trash2 size={16} />ဖယ်မယ်</button> : <span />}
-              <button type="button" className={styles.button} disabled={pending || !form.foodName.trim()} onClick={save}><Save size={16} />{pending ? "သိမ်းနေတယ်…" : "Meal သိမ်းမယ်"}</button>
+              <button type="button" className={styles.button} disabled={pending || !clientId || !form.foodName.trim()} onClick={save}><Save size={16} />{pending ? "သိမ်းနေတယ်…" : `${selectedClientName} အတွက် သိမ်းမယ်`}</button>
             </div>
           </div>
         </section>
-      </div>
+      </div>}
     </div>
   );
 }

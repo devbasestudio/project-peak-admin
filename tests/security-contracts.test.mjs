@@ -107,11 +107,13 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
 
   const meals = await read("src/components/coaching/meal-manager.tsx");
   assert.match(meals, /programType: "personal_coaching"/);
+  assert.match(meals, /ဘယ် Client အတွက်လဲ/);
+  assert.match(meals, /clients\.map/);
   assert.doesNotMatch(meals, /ဘယ် Program အတွက်လဲ/);
   assert.doesNotMatch(meals, /programTypes/);
-  for (const step of ["အချိန်ရွေးပါ", "အသစ်ထည့် သို့မဟုတ် ပြင်ပါ", "အချက်အလက်သိမ်းပါ"]) {
-    assert.match(meals, new RegExp(step));
-  }
+  for (const step of ["Client ရွေးပါ", "အချိန်နဲ့ Meal ရွေးပါ", "ပြင်ပြီး သိမ်းပါ"]) assert.match(meals, new RegExp(step));
+  assert.match(actions, /userId: z\.string\(\)\.uuid\(\)/);
+  assert.match(actions, /user_id: parsed\.data\.userId/);
 });
 
 test("home workout and 1:1 selectors share one categorized exercise source", async () => {

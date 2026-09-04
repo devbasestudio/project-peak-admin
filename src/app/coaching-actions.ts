@@ -154,7 +154,8 @@ export async function saveCoachingWorkout(input: unknown) {
 export async function saveCoachingMeal(input: unknown) {
   const parsed = z.object({
     id: z.coerce.number().int().positive().optional(),
-    programType: z.string().trim().min(1).max(80),
+    userId: z.string().uuid(),
+    programType: z.literal("personal_coaching"),
     mealType: z.enum(["breakfast", "lunch", "snack", "dinner", "evening"]),
     foodName: z.string().trim().min(1).max(180),
     foodNameMm: z.string().trim().max(180).default(""),
@@ -170,6 +171,7 @@ export async function saveCoachingMeal(input: unknown) {
   const viewer = await requireAdmin();
   const db = createAdminClient();
   const row = {
+    user_id: parsed.data.userId,
     program_type: parsed.data.programType, meal_type: parsed.data.mealType,
     food_name: parsed.data.foodName, food_name_mm: parsed.data.foodNameMm || null,
     portion: parsed.data.portion || null, calories: parsed.data.calories,
@@ -177,7 +179,7 @@ export async function saveCoachingMeal(input: unknown) {
     benefits_text: parsed.data.benefits || null, sort_order: parsed.data.sortOrder,
   };
   const result = parsed.data.id
-    ? await db.from("coaching_nutrition_items").update(row).eq("id", parsed.data.id).select("id").single()
+    ? await db.from("coaching_nutrition_items").update(row).eq("id", parsed.data.id).eq("user_id", parsed.data.userId).select("id").single()
     : await db.from("coaching_nutrition_items").insert(row).select("id").single();
   if (result.error || !result.data) return { ok: false, message: "Meal ကို သိမ်းမရပါ။ ပြန်စမ်းပေးပါ။" };
   await writeAudit(viewer.session.id, "coaching.meal.save", "coaching_nutrition_item", String(result.data.id));
@@ -186,11 +188,11 @@ export async function saveCoachingMeal(input: unknown) {
 }
 
 export async function deleteCoachingMeal(input: unknown) {
-  const parsed = z.object({ id: z.coerce.number().int().positive() }).safeParse(input);
+  const parsed = z.object({ id: z.coerce.number().int().positive(), userId: z.string().uuid() }).safeParse(input);
   if (!parsed.success) return { ok: false, message: "ဖျက်မယ့် meal မမှန်ပါ။" };
   const viewer = await requireAdmin();
   const db = createAdminClient();
-  const { error } = await db.from("coaching_nutrition_items").delete().eq("id", parsed.data.id);
+  const { error } = await db.from("coaching_nutrition_items").delete().eq("id", parsed.data.id).eq("user_id", parsed.data.userId);
   if (error) return { ok: false, message: "Meal ကို ဖျက်မရပါ။ အသုံးပြုပြီးသား log ရှိနိုင်ပါတယ်။" };
   await writeAudit(viewer.session.id, "coaching.meal.delete", "coaching_nutrition_item", String(parsed.data.id));
   revalidatePath("/coaching/meals");
