@@ -36,10 +36,10 @@ function normalize(value: unknown): Field[] {
   return value.flatMap((item, index) => {
     if (!item || typeof item !== "object") return [];
     const row = item as Record<string, unknown>;
-    const legacyType = row.type === "text" ? "long_text" : row.type;
+    const legacyType = row.type === "text" ? "long_text" : row.type === "select" && index === 2 ? "rating" : row.type;
     const type = fieldTypes.some((option) => option.value === legacyType) ? legacyType as FieldType : "short_text";
     const label = typeof row.label === "string" && row.label.trim() ? row.label.trim() : `မေးခွန်း ${index + 1}`;
-    const key = typeof row.key === "string" && row.key.trim() ? row.key : `custom_${index + 1}`;
+    const key = typeof row.key === "string" && row.key.trim() ? row.key : defaults[index]?.key || `custom_${index + 1}`;
     return [{ key, label, type, required: row.required === true }];
   });
 }
