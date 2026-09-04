@@ -11,6 +11,14 @@ function groupByUser<T extends { user_id: string }>(rows: T[]) {
   return groups;
 }
 
+function latestByUser<T extends { user_id: string }>(rows: T[]) {
+  const latest = new Map<string, T>();
+  for (const row of rows) {
+    if (!latest.has(row.user_id)) latest.set(row.user_id, row);
+  }
+  return latest;
+}
+
 export async function getCentralOverview() {
   const db = createAdminClient();
   const [customers, activePrograms, pendingPayments, templates, posts, publishedPosts, recentOrders, recentAudit] = await Promise.all([
@@ -43,8 +51,8 @@ export async function getAdminCustomers() {
     db.from("payment_orders").select("id,user_id,status,reference_code,created_at").order("created_at", { ascending: false }).limit(300),
   ]);
   const firstError = [profiles.error, programs.error, orders.error].find(Boolean); if (firstError) throw firstError;
-  const programByUser = new Map((programs.data ?? []).map((program) => [program.user_id, program]));
-  const orderByUser = new Map((orders.data ?? []).map((order) => [order.user_id, order]));
+  const programByUser = latestByUser(programs.data ?? []);
+  const orderByUser = latestByUser(orders.data ?? []);
   return (profiles.data ?? []).map((profile) => ({
     ...profile,
     program: programByUser.get(profile.id) ?? null,

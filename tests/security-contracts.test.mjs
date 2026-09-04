@@ -143,3 +143,24 @@ test("journal editor keeps the owner-facing fields and formatting controls", asy
   assert.match(richEditor, /current === tag \? "p" : tag/);
   assert.doesNotMatch(richEditor, /`\*\*/);
 });
+
+test("home workout payment and customer lists are searchable", async () => {
+  const search = await read("src/components/admin/admin-search.tsx");
+  assert.match(search, /role="search"/);
+  assert.match(search, /name="q"/);
+  assert.match(search, /အားလုံးပြမယ်/);
+
+  const payments = await read("src/app/(dashboard)/home-workout/payments/page.tsx");
+  const customers = await read("src/app/(dashboard)/home-workout/customers/page.tsx");
+  for (const source of [payments, customers]) {
+    assert.match(source, /searchParams/);
+    assert.match(source, /matchesSearch/);
+    assert.match(source, /<AdminSearch/);
+    assert.match(source, /ရှာမတွေ့ပါ/);
+  }
+  assert.match(payments, /reference_code/);
+  assert.match(customers, /program\?\.status/);
+  const data = await read("src/lib/data.ts");
+  assert.match(data, /function latestByUser/);
+  assert.match(data, /if \(!latest\.has\(row\.user_id\)\)/);
+});
