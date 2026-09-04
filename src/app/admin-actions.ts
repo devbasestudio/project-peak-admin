@@ -264,7 +264,12 @@ export async function reviewPaymentOrder(
     revalidatePath(adminPath(parsed.data.locale, "/payments"));
     revalidatePath(adminPath(parsed.data.locale, "/customers"));
     await writeAudit(viewer.session.id, `payment.${parsed.data.decision}`, "payment_order", parsed.data.orderId, { templateVersionId: parsed.data.templateVersionId });
-    return { ok: true, message: parsed.data.decision === "approve" ? "Payment approved and program assigned" : "Payment rejected" };
+    return {
+      ok: true,
+      message: parsed.data.decision === "approve"
+        ? "Payment approved and program assigned"
+        : "Payment rejected · Customer က reference အသစ်ထုတ်နိုင်ပါပြီ",
+    };
   } catch (error) {
     return { ok: false, message: cleanError(error) };
   }

@@ -43,7 +43,7 @@ export default async function PaymentsPage({ searchParams }: { searchParams: Pro
             <td className="mono" data-label="Amount">{Number(order.amount_minor).toLocaleString()} {order.currency}</td>
             <td data-label="Receipt">{order.proofUrl ? <a className={styles.buttonSecondary} href={order.proofUrl} target="_blank" rel="noreferrer">ပုံကြည့်မယ် <ExternalLink size={13} /></a> : <span className={styles.muted}>မတင်ရသေး</span>}</td>
             <td data-label="Status"><span className={styles.status} data-status={order.status}>{order.status.replaceAll("_", " ")}</span></td>
-            <td data-label="လုပ်ဆောင်ရန်">{["awaiting_payment", "submitted"].includes(order.status) ? <PaymentReview orderId={order.id} versions={versions} /> : <span className={styles.muted}>{order.status === "approved" ? "Program ပေးပြီး" : "ပိတ်ပြီး"}</span>}</td>
+            <td data-label="လုပ်ဆောင်ရန်">{["awaiting_payment", "submitted"].includes(order.status) ? <PaymentReview orderId={order.id} versions={versions} /> : <span className={styles.muted}>{order.status === "approved" ? "Program ပေးပြီး" : order.status === "rejected" ? "Reference အသစ်စောင့်နေသည်" : "ပိတ်ပြီး"}</span>}</td>
           </tr>)}</tbody>
         </table>
       </div> : <div className={styles.empty}><strong>{search ? "ရှာမတွေ့ပါ" : "Payment မရှိသေးပါ"}</strong>{search ? "နာမည်၊ reference code ဒါမှမဟုတ် status ကို ပြန်စစ်ကြည့်ပါ။" : "Customer ဝယ်ယူမှုတွေ ဒီမှာပေါ်ပါမယ်။"}</div>}
