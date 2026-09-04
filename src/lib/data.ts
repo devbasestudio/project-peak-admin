@@ -483,17 +483,13 @@ export async function getSharedExerciseLibraryData() {
 
 export async function getCoachingMealManagerData() {
   const db = createAdminClient();
-  const [items, programs] = await Promise.all([
-    db.from("coaching_nutrition_items")
-      .select("id,program_type,meal_type,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
-      .order("sort_order")
-      .order("id"),
-    db.from("coaching_programs").select("program_type"),
-  ]);
-  const firstError = [items.error, programs.error].find(Boolean);
-  if (firstError) throw firstError;
-  const programTypes = [...new Set(["personal_coaching", ...(programs.data ?? []).map((row) => row.program_type).filter(Boolean)])];
-  return { items: items.data ?? [], programTypes };
+  const { data, error } = await db.from("coaching_nutrition_items")
+    .select("id,program_type,meal_type,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
+    .eq("program_type", "personal_coaching")
+    .order("sort_order")
+    .order("id");
+  if (error) throw error;
+  return data ?? [];
 }
 
 export async function getCoachingFeedbackManagerData() {

@@ -5,6 +5,6 @@ import { CoachingToolsNav } from "@/components/coaching/coaching-tools-nav";
 export const dynamic = "force-dynamic";
 
 export default async function CoachingMealsPage(){
-  const data=await getCoachingMealManagerData();
-  return <><CoachingToolsNav group="plans" active="/coaching/meals"/><MealManager items={data.items} programTypes={data.programTypes}/></>;
+  const items=await getCoachingMealManagerData();
+  return <><CoachingToolsNav group="plans" active="/coaching/meals"/><MealManager items={items}/></>;
 }

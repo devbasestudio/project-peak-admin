@@ -104,6 +104,14 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(feedback, /function move/);
   const coachingItems = shell.match(/href: "\/coaching\//g) || [];
   assert.equal(coachingItems.length, 4);
+
+  const meals = await read("src/components/coaching/meal-manager.tsx");
+  assert.match(meals, /programType: "personal_coaching"/);
+  assert.doesNotMatch(meals, /ဘယ် Program အတွက်လဲ/);
+  assert.doesNotMatch(meals, /programTypes/);
+  for (const step of ["အချိန်ရွေးပါ", "အသစ်ထည့် သို့မဟုတ် ပြင်ပါ", "အချက်အလက်သိမ်းပါ"]) {
+    assert.match(meals, new RegExp(step));
+  }
 });
 
 test("home workout and 1:1 selectors share one categorized exercise source", async () => {
