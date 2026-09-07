@@ -39,11 +39,11 @@ export function DashboardShell({ children, sessionStarted }: { children: React.R
       : pathname;
   const active = visibleSections.flatMap((section) => section.items).find((item) => groupedPath.startsWith(item.href)) ?? sections[0].items[0];
   const liveSite = workspace === "HOME WORKOUT"
-    ? { label: "Workout site", href: "https://project-peak-beta.vercel.app" }
+    ? { label: "Workout site", href: "https://homeworkout.projectpeak.fit" }
     : workspace === "1:1 COACHING"
-      ? { label: "1:1 site", href: "https://project-peak-coaching.vercel.app" }
+      ? { label: "1:1 site", href: "https://coaching.projectpeak.fit" }
       : workspace === "MAIN WEBSITE"
-        ? { label: "Main site", href: "https://project-peak-landing.vercel.app" }
+        ? { label: "Main site", href: "https://projectpeak.fit" }
         : null;
   return <div className={styles.shell}>
     <button className={styles.backdrop} data-open={open} onClick={() => setOpen(false)} aria-label="Menu ပိတ်မယ်" />
