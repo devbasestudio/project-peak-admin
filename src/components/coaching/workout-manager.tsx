@@ -3,16 +3,16 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Dumbbell, Plus, Save, Trash2 } from "lucide-react";
-import { saveCoachingWorkout } from "@/app/coaching-actions";
+import { CalendarPlus, Dumbbell, Plus, Save, Trash2 } from "lucide-react";
+import { duplicateCoachingWorkout, saveCoachingWorkout } from "@/app/coaching-actions";
 import styles from "./content-managers.module.css";
 
 type Client={id:string;username:string;email:string;registration?:{name?:string|null}|null};
-type Exercise={id?:number;shared_exercise_id:string|null;exercise_name:string;target_sets:number|null;target_reps:string|null};
+type Exercise={id?:number;shared_exercise_id:string|null;exercise_name:string;target_sets:number|null;target_reps:string|null;rest_seconds:number|null};
 type Workout={id:number;user_id:string;date:string;split_name:string;completed:boolean;exercises:Exercise[]};
-type LibraryExercise={id:string;category_name:string;name_en:string;name_mm:string;default_sets:number;default_reps_min:number;default_reps_max:number};
-type EditExercise={id?:number;libraryExerciseId:string;exerciseName:string;targetSets:number;targetReps:string};
-const blankExercise=():EditExercise=>({libraryExerciseId:"",exerciseName:"",targetSets:3,targetReps:"8-12"});
+type LibraryExercise={id:string;category_name:string;name_en:string;name_mm:string;default_sets:number;default_reps_min:number;default_reps_max:number;default_rest_seconds:number};
+type EditExercise={id?:number;libraryExerciseId:string;exerciseName:string;targetSets:number;targetReps:string;restSeconds:number};
+const blankExercise=():EditExercise=>({libraryExerciseId:"",exerciseName:"",targetSets:3,targetReps:"8-12",restSeconds:90});
 
 export function WorkoutManager({clients,workouts,library,today}:{clients:Client[];workouts:Workout[];library:LibraryExercise[];today:string}){
   const router=useRouter();
@@ -27,16 +27,17 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
   const visible=useMemo(()=>workouts.filter(row=>row.user_id===clientId),[clientId,workouts]);
   const libraryByCategory=useMemo(()=>{const groups=new Map<string,LibraryExercise[]>();for(const item of library){const rows=groups.get(item.category_name)??[];rows.push(item);groups.set(item.category_name,rows);}return [...groups.entries()];},[library]);
   const selectedClient=clients.find(row=>row.id===clientId);
+  const selectedWorkout=workouts.find(row=>row.id===workoutId);
 
   function selectWorkout(row:Workout){
     setWorkoutId(row.id);setDate(row.date);setSplitName(row.split_name);
-    setExercises(row.exercises.length?row.exercises.map(ex=>({id:ex.id,libraryExerciseId:ex.shared_exercise_id??library.find(item=>item.name_en.toLocaleLowerCase()===ex.exercise_name.toLocaleLowerCase())?.id??"",exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12"})):[blankExercise()]);
+    setExercises(row.exercises.length?row.exercises.map(ex=>{const libraryExercise=library.find(item=>item.id===ex.shared_exercise_id||item.name_en.toLocaleLowerCase()===ex.exercise_name.toLocaleLowerCase());return {id:ex.id,libraryExerciseId:ex.shared_exercise_id??libraryExercise?.id??"",exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12",restSeconds:ex.rest_seconds??libraryExercise?.default_rest_seconds??90};}):[blankExercise()]);
     setMessage("");
   }
   function fresh(){setWorkoutId(undefined);setDate(today);setSplitName("Full Body");setExercises([blankExercise()]);setMessage("");}
   function pickExercise(index:number,libraryExerciseId:string){
     const selected=library.find(item=>item.id===libraryExerciseId);
-    setExercises(rows=>rows.map((row,position)=>position===index?{...row,libraryExerciseId,exerciseName:selected?.name_en??"",targetSets:selected?.default_sets??row.targetSets,targetReps:selected?`${selected.default_reps_min}-${selected.default_reps_max}`:row.targetReps}:row));
+    setExercises(rows=>rows.map((row,position)=>position===index?{...row,libraryExerciseId,exerciseName:selected?.name_en??"",targetSets:selected?.default_sets??row.targetSets,targetReps:selected?`${selected.default_reps_min}-${selected.default_reps_max}`:row.targetReps,restSeconds:selected?.default_rest_seconds??row.restSeconds}:row));
   }
   function save(){
     setMessage("");
@@ -44,6 +45,19 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
       const result=await saveCoachingWorkout({id:workoutId,userId:clientId,date,splitName,exercises});
       setOk(result.ok);setMessage(result.message);
       if(result.ok&&result.workoutId){setWorkoutId(result.workoutId);router.refresh();}
+    });
+  }
+  function duplicateNextWeek(){
+    if(!workoutId)return;
+    setMessage("");
+    startTransition(async()=>{
+      const result=await duplicateCoachingWorkout({workoutId});
+      setOk(result.ok);setMessage(result.message);
+      if(result.ok&&result.workoutId&&result.date&&result.exercises){
+        setWorkoutId(result.workoutId);setDate(result.date);
+        setExercises(result.exercises.map(ex=>({id:ex.id,libraryExerciseId:ex.shared_exercise_id??"",exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12",restSeconds:ex.rest_seconds??90})));
+        router.refresh();
+      }
     });
   }
 
@@ -57,7 +71,7 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
         <div className={styles.sessionList}>{visible.length?visible.map(row=><button className={styles.session} data-active={row.id===workoutId} key={row.id} onClick={()=>selectWorkout(row)}><time>{row.date}</time><span><strong>{row.split_name}</strong><small>{row.exercises.length} exercises · {row.completed?"ပြီး":"လုပ်ရန်"}</small></span><Dumbbell size={17}/></button>):<div className={styles.empty}>ဒီ Client အတွက် session မရှိသေးပါ။ “အသစ်” နှိပ်ပြီး စပါ။</div>}</div>
       </aside>
       <section className={styles.panel}>
-        <div className={styles.panelHead}><div><p className={styles.kicker}>{workoutId?"EDIT SESSION":"NEW SESSION"}</p><h2>{workoutId?"Workout ပြင်မယ်":"Workout အသစ်ထည့်မယ်"}</h2></div><Link className={styles.link} href="/exercises">Common Exercises ပြင်မယ် →</Link></div>
+        <div className={styles.panelHead}><div><p className={styles.kicker}>{workoutId?"EDIT SESSION":"NEW SESSION"}</p><h2>{workoutId?"Workout ပြင်မယ်":"Workout အသစ်ထည့်မယ်"}</h2></div><div className={styles.headActions}>{selectedWorkout?.completed?<button type="button" className={styles.secondary} disabled={pending} onClick={duplicateNextWeek}><CalendarPlus size={17}/>{pending?"ပွားနေတယ်…":"နောက်အပတ် ပွားမယ်"}</button>:null}<Link className={styles.link} href="/exercises">Common Exercises ပြင်မယ် →</Link></div></div>
         <div className={styles.panelBody}>
           <div className={styles.row}><label className={styles.field}><span>ဆော့မယ့်ရက်</span><input type="date" value={date} onChange={event=>setDate(event.target.value)}/></label><label className={styles.field}><span>Session နာမည်</span><input value={splitName} onChange={event=>setSplitName(event.target.value)} placeholder="ဥပမာ Push A"/></label></div>
           {library.length===0?<div className={styles.help}><strong>Exercise Library မရှိသေးပါ</strong><br/><Link className={styles.link} href="/exercises">Common Library မှာ Exercise အရင်ထည့်ပါ →</Link></div>:null}
@@ -66,6 +80,7 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
             <label><span>Exercise</span><select value={exercise.libraryExerciseId} onChange={event=>pickExercise(index,event.target.value)}><option value="">Exercise ရွေးပါ</option>{libraryByCategory.map(([group,rows])=><optgroup label={group} key={group}>{rows.map(item=><option key={item.id} value={item.id}>{item.name_en}{item.name_mm!==item.name_en?` · ${item.name_mm}`:""}</option>)}</optgroup>)}</select></label>
             <label><span>Sets</span><input type="number" min="1" max="20" value={exercise.targetSets} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,targetSets:Number(event.target.value)}:row))}/></label>
             <label><span>Reps</span><input value={exercise.targetReps} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,targetReps:event.target.value}:row))} placeholder="8-12"/></label>
+            <label><span>Rest (sec)</span><input type="number" min="0" max="3600" step="5" value={exercise.restSeconds} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,restSeconds:Number(event.target.value)}:row))}/></label>
             <button aria-label={`${exercise.exerciseName||"Exercise"} ဖယ်မယ်`} className={styles.iconButton} disabled={exercises.length===1} onClick={()=>setExercises(rows=>rows.filter((_,position)=>position!==index))}><Trash2 size={17}/></button>
           </div>)}</div>
           <div className={styles.actions}><button className={styles.secondary} disabled={!library.length} onClick={()=>setExercises(rows=>[...rows,blankExercise()])}><Plus size={17}/>Exercise ထည့်မယ်</button><button className={styles.button} disabled={pending||!clientId||!date||!splitName.trim()||exercises.some(exercise=>!exercise.libraryExerciseId)} onClick={save}><Save size={17}/>{pending?"သိမ်းနေတယ်…":"Workout သိမ်းမယ်"}</button></div>

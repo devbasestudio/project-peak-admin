@@ -80,6 +80,7 @@ const workoutExerciseSchema = z.object({
   exerciseName: z.string().trim().min(1).max(180),
   targetSets: z.coerce.number().int().min(1).max(20),
   targetReps: z.string().trim().min(1).max(40),
+  restSeconds: z.coerce.number().int().min(0).max(3600),
 });
 
 export async function saveCoachingWorkout(input: unknown) {
@@ -125,6 +126,7 @@ export async function saveCoachingWorkout(input: unknown) {
         exercise_name: libraryNameById.get(exercise.libraryExerciseId),
         target_sets: exercise.targetSets,
         target_reps: exercise.targetReps,
+        rest_seconds: exercise.restSeconds,
       }).eq("id", exercise.id).eq("workout_id", workoutId);
       if (error) return { ok: false, message: `${exercise.exerciseName} ကို update မလုပ်နိုင်ပါ။` };
       keptIds.push(exercise.id);
@@ -135,6 +137,7 @@ export async function saveCoachingWorkout(input: unknown) {
         exercise_name: libraryNameById.get(exercise.libraryExerciseId),
         target_sets: exercise.targetSets,
         target_reps: exercise.targetReps,
+        rest_seconds: exercise.restSeconds,
       }).select("id").single();
       if (error || !data) return { ok: false, message: `${exercise.exerciseName} ကို မသိမ်းနိုင်ပါ။` };
       keptIds.push(data.id);
@@ -149,6 +152,46 @@ export async function saveCoachingWorkout(input: unknown) {
   revalidatePath("/coaching/workouts");
   revalidatePath(`/coaching/clients/${parsed.data.userId}`);
   return { ok: true, message: "Workout plan သိမ်းပြီးပါပြီ။ Client app မှာ ဒီရက်အတွက်ပြပါမယ်။", workoutId };
+}
+
+export async function duplicateCoachingWorkout(input: unknown) {
+  const parsed = z.object({ workoutId: z.coerce.number().int().positive() }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "ပွားမယ့် Session ကို ပြန်ရွေးပေးပါ။" };
+
+  const viewer = await requireAdmin();
+  const db = createAdminClient();
+  const { data, error } = await db.rpc("clone_coaching_workout_to_next_week", {
+    p_source_workout_id: parsed.data.workoutId,
+  });
+  if (error) {
+    if (error.code === "55000") return { ok: false, message: "Client ဆော့ပြီးသွားတဲ့ Session ကိုပဲ နောက်အပတ်ပွားနိုင်ပါတယ်။" };
+    if (error.code === "23505") return { ok: false, message: "နောက်အပတ် ဒီရက်မှာ Session ရှိပြီးသားပါ။" };
+    console.error("Coaching workout clone failed", error.code);
+    return { ok: false, message: "Session ကို နောက်အပတ် မပွားနိုင်သေးပါ။" };
+  }
+
+  const cloned = Array.isArray(data) ? data[0] : null;
+  if (!cloned?.workout_id || !cloned?.workout_date) return { ok: false, message: "ပွားထားတဲ့ Session ကို ပြန်ဖတ်မရသေးပါ။" };
+  const { data: clonedExercises, error: clonedExercisesError } = await db.from("coaching_workout_exercises")
+    .select("id,shared_exercise_id,exercise_name,target_sets,target_reps,rest_seconds")
+    .eq("workout_id", cloned.workout_id)
+    .order("id");
+  if (clonedExercisesError) {
+    console.error("Cloned coaching exercises lookup failed", clonedExercisesError.code);
+    return { ok: false, message: "Session ပွားပြီးပေမယ့် Exercise တွေကို ပြန်ဖတ်မရသေးပါ။ Page ကို refresh လုပ်ပေးပါ။" };
+  }
+  await writeAudit(viewer.session.id, "coaching.workout.clone_next_week", "coaching_workout", String(cloned.workout_id), {
+    sourceWorkoutId: parsed.data.workoutId,
+    targetDate: cloned.workout_date,
+  });
+  revalidatePath("/coaching/workouts");
+  return {
+    ok: true,
+    message: `${cloned.workout_date} ရက်အတွက် Session ပွားပြီးပါပြီ။`,
+    workoutId: cloned.workout_id as number,
+    date: cloned.workout_date as string,
+    exercises: clonedExercises ?? [],
+  };
 }
 
 export async function saveCoachingMeal(input: unknown) {

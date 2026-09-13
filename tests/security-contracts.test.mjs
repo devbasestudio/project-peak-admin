@@ -76,7 +76,7 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   for (const route of ["/exercises", "/coaching/workouts", "/coaching/meals", "/coaching/feedback-forms"]) assert.match(shell, new RegExp(route));
   assert.doesNotMatch(shell, /href: "\/coaching\/exercises"/);
   const actions = await read("src/app/coaching-actions.ts");
-  for (const action of ["saveCoachingWorkout", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
+  for (const action of ["saveCoachingWorkout", "duplicateCoachingWorkout", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
   assert.doesNotMatch(actions, /saveCoachingExerciseLibraryItem/);
   for (const table of ["coaching_workouts", "coaching_workout_exercises", "coaching_nutrition_items", "coaching_feedback_form_templates"]) assert.match(actions, new RegExp(`from\\(\\\"${table}\\\"\\)`));
   assert.match(actions, /await requireAdmin\(\)/);
@@ -84,7 +84,16 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(workout, /type=\"number\"/);
   assert.match(workout, /<select value=\{exercise\.libraryExerciseId\}/);
   assert.match(workout, /<optgroup label=\{group\}/);
+  assert.match(workout, /Rest \(sec\)/);
+  assert.match(workout, /နောက်အပတ် ပွားမယ်/);
   assert.match(workout, /Workout သိမ်းမယ်/);
+  const cloneMigration = await read("supabase/migrations/20260913080416_add_coaching_workout_rest_and_clone.sql");
+  assert.match(cloneMigration, /add column if not exists rest_seconds integer/);
+  assert.match(cloneMigration, /clone_coaching_workout_to_next_week/);
+  assert.match(cloneMigration, /source_workout\.date \+ 7/);
+  assert.match(cloneMigration, /rest_seconds, null, null/);
+  assert.match(cloneMigration, /revoke all .* authenticated/);
+  assert.match(cloneMigration, /grant execute .* service_role/);
   const library = await read("src/components/admin/shared-exercise-manager.tsx");
   assert.match(library, /shared-exercise-video/);
   assert.match(library, /Category အသစ်ထည့်မယ်/);
