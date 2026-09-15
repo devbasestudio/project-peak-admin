@@ -8,11 +8,33 @@ import styles from "./client-progress.module.css";
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 const dayNames = ["တနင်္ဂနွေ", "တနင်္လာ", "အင်္ဂါ", "ဗုဒ္ဓဟူး", "ကြာသပတေး", "သောကြာ", "စနေ"];
-const numeric = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : null;
+const numeric = (value: unknown) => value === null || value === undefined || value === "" ? null : Number.isFinite(Number(value)) ? Number(value) : null;
 const displayDate = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 const shortDate = (value: string) => new Date(`${value}T00:00:00Z`).toLocaleDateString("en-GB", { day: "2-digit", month: "short", timeZone: "UTC" });
 const dateFromTimestamp = (value: string) => new Date(value).toISOString().slice(0, 10);
 const firstRelation = <T,>(value: T | T[] | null | undefined) => Array.isArray(value) ? value[0] ?? null : value ?? null;
+type TemplateField = { id?: string; label?: string; type?: string };
+type TrackerRow = { tracker_values?: unknown; steps?: unknown; sleep_score?: unknown };
+
+function trackerValuesOf(row?: TrackerRow | null) {
+  return row?.tracker_values && typeof row.tracker_values === "object" && !Array.isArray(row.tracker_values)
+    ? row.tracker_values as Record<string, unknown>
+    : {};
+}
+
+function normalized(value?: string) {
+  return String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function semanticTrackerValue(row: TrackerRow | null | undefined, fields: TemplateField[], semantic: "steps" | "sleep") {
+  const values = trackerValuesOf(row);
+  const allowedTypes = semantic === "steps" ? new Set(["number", "counter"]) : new Set(["select", "number", "counter"]);
+  const field = fields.find((item) => normalized(item.id) === semantic && allowedTypes.has(String(item.type)))
+    ?? fields.find((item) => normalized(item.label) === semantic && allowedTypes.has(String(item.type)));
+  const customValue = field?.id ? values[field.id] : undefined;
+  if (customValue !== null && customValue !== undefined && customValue !== "") return customValue;
+  return semantic === "steps" ? row?.steps : row?.sleep_score;
+}
 
 function WeightChart({ rows }: { rows: Array<{ date: string; body_weight: unknown }> }) {
   const points = rows.filter((row) => numeric(row.body_weight) !== null).slice(0, 21).reverse().map((row) => ({ date: row.date, weight: numeric(row.body_weight) as number }));
@@ -38,12 +60,16 @@ export default async function CoachingClientProgressPage({ params, searchParams 
   const programStart = client.program?.start_date ? new Date(`${client.program.start_date}T00:00:00Z`) : null;
   const elapsedDays = programStart ? Math.max(0, Math.floor((new Date(client.generatedAt).getTime() - programStart.getTime()) / 86_400_000)) : 0;
   const currentWeek = client.program ? Math.min(client.program.duration_weeks, Math.floor(elapsedDays / 7) + 1) : null;
+  const templateSections = Array.isArray(client.template?.sections) ? client.template.sections as Array<{ title?: string; fields?: TemplateField[] }> : [];
+  const templateFields = templateSections.flatMap((section) => section.fields ?? []);
   const recentLogs = client.trackers.slice(0, 14);
   const habitChecks = recentLogs.flatMap((row) => [row.water_3l, row.omega_3, row.bed_phone_filter, row.meal_plan_adhered, row.toilet]);
   const habitRate = habitChecks.length ? Math.round((habitChecks.filter(Boolean).length / habitChecks.length) * 100) : 0;
-  const averageSteps = recentLogs.length ? Math.round(recentLogs.reduce((sum, row) => sum + (numeric(row.steps) ?? 0), 0) / recentLogs.length) : 0;
-  const sleepValues = recentLogs.map((row) => numeric(row.sleep_score)).filter((value): value is number => value !== null);
-  const averageSleep = sleepValues.length ? (sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length).toFixed(1) : "—";
+  const stepValues = recentLogs.map((row) => numeric(semanticTrackerValue(row, templateFields, "steps"))).filter((value): value is number => value !== null);
+  const averageSteps = stepValues.length ? Math.round(stepValues.reduce((sum, value) => sum + value, 0) / stepValues.length) : 0;
+  const sleepValues = recentLogs.map((row) => numeric(semanticTrackerValue(row, templateFields, "sleep"))).filter((value): value is number => value !== null);
+  const latestSleepLabel = recentLogs.map((row) => semanticTrackerValue(row, templateFields, "sleep")).find((value) => typeof value === "string" && value.trim());
+  const averageSleep = sleepValues.length ? (sleepValues.reduce((sum, value) => sum + value, 0) / sleepValues.length).toFixed(1) : String(latestSleepLabel || "—");
 
   const dayDates = [...new Set([...client.trackers.map((row) => row.date), ...client.workouts.map((row) => row.date), ...client.journals.map((row) => row.date), ...client.nutritionLogs.map((row) => row.date), ...client.checkins.map((row) => dateFromTimestamp(row.created_at))])].sort((a, b) => b.localeCompare(a));
   const selectedDate = query.date && isoDatePattern.test(query.date) && dayDates.includes(query.date) ? query.date : dayDates[0] ?? new Date(client.generatedAt).toISOString().slice(0, 10);
@@ -55,10 +81,17 @@ export default async function CoachingClientProgressPage({ params, searchParams 
   const selectedCheckins = client.checkins.filter((row) => dateFromTimestamp(row.created_at) === selectedDate);
   const selectedDayOfWeek = new Date(`${selectedDate}T00:00:00Z`).getUTCDay();
   const scheduledDay = client.schedule.find((row) => row.day_of_week === selectedDayOfWeek) ?? null;
-  const trackerValues = selectedTracker?.tracker_values && typeof selectedTracker.tracker_values === "object" && !Array.isArray(selectedTracker.tracker_values) ? selectedTracker.tracker_values as Record<string, unknown> : {};
+  const trackerValues = trackerValuesOf(selectedTracker);
+  const selectedSteps = semanticTrackerValue(selectedTracker, templateFields, "steps");
+  const selectedSleep = semanticTrackerValue(selectedTracker, templateFields, "sleep");
+  const trackerPhotos = templateFields.flatMap((field) => {
+    const value = field.id ? trackerValues[field.id] : null;
+    return field.type === "photo" && typeof value === "string" && value.startsWith("http")
+      ? [{ id: field.id || field.label || value, label: field.label || "Photo", url: value }]
+      : [];
+  });
   const selectedHabitCount = selectedTracker ? [selectedTracker.water_3l, selectedTracker.omega_3, selectedTracker.bed_phone_filter, selectedTracker.meal_plan_adhered, selectedTracker.toilet].filter(Boolean).length : 0;
   const selectedRecordCount = Number(Boolean(selectedTracker)) + selectedWorkouts.length + selectedNutrition.length + Number(Boolean(selectedJournal)) + selectedCheckins.length;
-  const templateSections = Array.isArray(client.template?.sections) ? client.template.sections as Array<{ title?: string; fields?: Array<{ id?: string; label?: string; type?: string }> }> : [];
   const templateFieldCount = templateSections.reduce((total, section) => total + (section.fields?.length ?? 0), 0);
   const progressPhotos = client.checkins.filter((checkin) => checkin.progressPhotoUrl);
   const baselinePhotos = client.registration ? Object.entries(client.registration.photos).filter((entry): entry is [string, string] => Boolean(entry[1])) : [];
@@ -79,9 +112,9 @@ export default async function CoachingClientProgressPage({ params, searchParams 
       <div className={styles.dayContent}>
         <header className={styles.dayHero}><div><p>SELECTED DAY</p><h2>{displayDate(selectedDate)}</h2><span>{dayNames[selectedDayOfWeek]} · {selectedRecordCount ? `${selectedRecordCount} records` : "မှတ်တမ်းမရှိသေး"}</span></div><div className={styles.dayNav}>{selectedIndex > 0 ? <Link aria-label="Newer day" href={`/coaching/clients/${clientId}?date=${dayDates[selectedIndex - 1]}#day-detail`}><ChevronLeft size={17}/></Link> : <span/>}{selectedIndex >= 0 && selectedIndex < dayDates.length - 1 ? <Link aria-label="Older day" href={`/coaching/clients/${clientId}?date=${dayDates[selectedIndex + 1]}#day-detail`}><ChevronRight size={17}/></Link> : <span/>}</div></header>
         <div className={styles.dayModules}>
-          <article className={styles.dayModule}><ModuleHead icon={<Gauge size={17}/>} eyebrow="TRACKER" title="နေ့စဉ်အခြေအနေ" badge={selectedTracker ? `${selectedHabitCount}/5 habits` : undefined}/>{selectedTracker ? <><dl className={styles.facts}><Fact label="Weight" value={numeric(selectedTracker.body_weight) !== null ? `${numeric(selectedTracker.body_weight)?.toFixed(1)} kg` : "—"}/><Fact label="Steps" value={numeric(selectedTracker.steps)?.toLocaleString() ?? "—"}/><Fact label="Water" value={numeric(selectedTracker.water_liters) !== null ? `${numeric(selectedTracker.water_liters)} L` : selectedTracker.water_3l ? "Done" : "—"}/><Fact label="Sleep" value={numeric(selectedTracker.sleep_score) !== null ? `${numeric(selectedTracker.sleep_score)}/10` : String(trackerValues.sleep || "—")}/><Fact label="Wake" value={selectedTracker.wake_time || "—"}/><Fact label="Phone off" value={selectedTracker.phone_off_time || "—"}/></dl>{selectedTracker.one_win || trackerValues.win ? <DayNote positive title="ဒီနေ့အောင်မြင်မှု" text={String(selectedTracker.one_win || trackerValues.win)}/> : null}{selectedTracker.one_struggle ? <DayNote title="အခက်အခဲ" text={selectedTracker.one_struggle}/> : null}</> : <Empty icon={<Gauge size={24}/>} title="Tracker မဖြည့်ရသေးပါ" text="Client ဖြည့်ပြီးရင် ဒီနေ့အချက်အလက် ဒီမှာပေါ်ပါမယ်။"/>}</article>
+          <article className={styles.dayModule}><ModuleHead icon={<Gauge size={17}/>} eyebrow="TRACKER" title="နေ့စဉ်အခြေအနေ" badge={selectedTracker ? `${selectedHabitCount}/5 habits` : undefined}/>{selectedTracker ? <><dl className={styles.facts}><Fact label="Weight" value={numeric(selectedTracker.body_weight) !== null ? `${numeric(selectedTracker.body_weight)?.toFixed(1)} kg` : "—"}/><Fact label="Steps" value={numeric(selectedSteps)?.toLocaleString() ?? "—"}/><Fact label="Water" value={numeric(selectedTracker.water_liters) !== null ? `${numeric(selectedTracker.water_liters)} L` : selectedTracker.water_3l ? "Done" : "—"}/><Fact label="Sleep" value={typeof selectedSleep === "string" ? selectedSleep : numeric(selectedSleep) !== null ? `${numeric(selectedSleep)}/10` : "—"}/><Fact label="Wake" value={selectedTracker.wake_time || "—"}/><Fact label="Phone off" value={selectedTracker.phone_off_time || "—"}/></dl>{selectedTracker.one_win || trackerValues.win ? <DayNote positive title="ဒီနေ့အောင်မြင်မှု" text={String(selectedTracker.one_win || trackerValues.win)}/> : null}{selectedTracker.one_struggle ? <DayNote title="အခက်အခဲ" text={selectedTracker.one_struggle}/> : null}</> : <Empty icon={<Gauge size={24}/>} title="Tracker မဖြည့်ရသေးပါ" text="Client ဖြည့်ပြီးရင် ဒီနေ့အချက်အလက် ဒီမှာပေါ်ပါမယ်။"/>}</article>
           <article className={styles.dayModule}><ModuleHead icon={<Dumbbell size={17}/>} eyebrow="WORKOUT" title="Session Detail"/>{selectedWorkouts.length ? <div className={styles.workoutList}>{selectedWorkouts.map((workout) => <section key={workout.id}><header><div><strong>{workout.split_name}</strong><small>{workout.exercises.length} exercises · {workout.user_feelings || "Feeling မမှတ်ထား"}</small></div><b data-complete={workout.completed}>{workout.completed ? "DONE" : "PLANNED"}</b></header>{workout.exercises.length ? <div className={styles.exerciseList}>{workout.exercises.map((exercise, index) => <div key={exercise.id}><span>{String(index + 1).padStart(2, "0")}</span><div><strong>{exercise.exercise_name}</strong><small>{exercise.target_sets} sets · {exercise.target_reps} reps</small></div><b>{exercise.actual_weight || "—"}<small>{exercise.actual_reps || "No log"}</small></b></div>)}</div> : <div className={styles.subEmpty}>Exercise မထည့်ရသေးပါ</div>}{workout.user_notes ? <DayNote title="Client note" text={workout.user_notes}/> : null}</section>)}</div> : scheduledDay?.is_rest ? <State icon={<Moon size={28}/>} title="Recovery Day" text="ဒီနေ့က schedule အရ Rest Day ဖြစ်ပါတယ်။ Workout မလိုပါ။" rest/> : <State icon={<Dumbbell size={28}/>} title="Session ပြင်ဆင်နေဆဲ" text={scheduledDay?.split_name ? `${scheduledDay.split_name} session ကို coach က exercise ထည့်ပေးဖို့လိုပါတယ်။` : "ဒီနေ့အတွက် schedule သို့မဟုတ် workout မသတ်မှတ်ရသေးပါ။"}/>}</article>
-          <article className={styles.dayModule}><ModuleHead icon={<Utensils size={17}/>} eyebrow="MEALS" title="Nutrition" badge={selectedNutrition.length ? `${selectedNutrition.filter((row) => row.completed).length}/${selectedNutrition.length}` : undefined}/>{selectedNutrition.length ? <div className={styles.meals}>{selectedNutrition.map((log) => { const item = firstRelation(log.coaching_nutrition_items); return <div data-complete={log.completed} key={log.id}><CheckCircle2 size={16}/><span><strong>{item?.food_name_mm || item?.food_name || "Meal item"}</strong><small>{item?.meal_type || "Meal"} · {item?.portion || "portion မရှိသေး"}</small></span><b>{item?.calories ?? 0} kcal</b></div>; })}</div> : <Empty icon={<Utensils size={24}/>} title="Meal log မရှိသေးပါ" text="Client ရွေးပြီးစားထားတဲ့ meal တွေ ဒီမှာပေါ်ပါမယ်။"/>}</article>
+          <article className={styles.dayModule}><ModuleHead icon={<Utensils size={17}/>} eyebrow="MEALS" title="Nutrition" badge={selectedNutrition.length ? `${selectedNutrition.filter((row) => row.completed).length}/${selectedNutrition.length}` : trackerPhotos.length ? `${trackerPhotos.length} photos` : undefined}/>{selectedNutrition.length ? <div className={styles.meals}>{selectedNutrition.map((log) => { const item = firstRelation(log.coaching_nutrition_items); return <div data-complete={log.completed} key={log.id}><CheckCircle2 size={16}/><span><strong>{item?.food_name_mm || item?.food_name || "Meal item"}</strong><small>{item?.meal_type || "Meal"} · {item?.portion || "portion မရှိသေး"}</small></span><b>{item?.calories ?? 0} kcal</b></div>; })}</div> : null}{trackerPhotos.length ? <div className={styles.trackerPhotos}>{trackerPhotos.map((photo) => <figure key={photo.id}><Image alt={photo.label} height={360} src={photo.url} unoptimized width={360}/><figcaption>{photo.label}</figcaption></figure>)}</div> : null}{!selectedNutrition.length && !trackerPhotos.length ? <Empty icon={<Utensils size={24}/>} title="Meal log မရှိသေးပါ" text="Client ရွေးပြီးစားထားတဲ့ meal တွေ ဒီမှာပေါ်ပါမယ်။"/> : null}</article>
           <article className={styles.dayModule}><ModuleHead icon={<Sparkles size={17}/>} eyebrow="DAY NOTE" title="နေ့တာသုံးသပ်ချက်"/>{selectedJournal ? <div className={styles.journal}><Journal label="Diet status" value={selectedJournal.diet_status}/><Journal label="ကျေနပ်ခဲ့တာ" value={selectedJournal.satisfied_with}/><Journal label="ခက်ခဲခဲ့တာ" value={selectedJournal.difficult_with}/></div> : <Empty icon={<Sparkles size={24}/>} title="နေ့တာ note မရှိသေးပါ" text="Client ရေးထားတဲ့ reflection ကို ဒီမှာကြည့်နိုင်ပါတယ်။"/>}</article>
         </div>
         {selectedCheckins.length ? <section className={styles.dayCheckin}><ModuleHead icon={<ClipboardCheck size={17}/>} eyebrow="WEEKLY CHECK-IN" title="ဒီနေ့တင်ထားတဲ့ Review"/>{selectedCheckins.map((checkin) => <div className={styles.checkinBody} key={checkin.id}><dl><Fact label="Week" value={String(checkin.week_number)}/><Fact label="Weight" value={`${numeric(checkin.avg_weight)?.toFixed(1) ?? "—"} kg`}/><Fact label="Motivation" value={`${checkin.motivation ?? "—"}/10`}/></dl>{checkin.improvement_notes ? <DayNote positive title="တိုးတက်မှု" text={checkin.improvement_notes}/> : null}{checkin.struggle_notes ? <DayNote title="အခက်အခဲ" text={checkin.struggle_notes}/> : null}{checkin.admin_feedback ? <blockquote><strong>Coach feedback</strong>{checkin.admin_feedback}</blockquote> : null}</div>)}</section> : null}

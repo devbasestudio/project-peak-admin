@@ -59,10 +59,17 @@ test("1:1 client progress has a detailed drill-down and repeat-safe demo seed", 
   for (const label of ["DAY BY DAY", "SELECTED DAY", "TRACKER", "WORKOUT", "MEALS", "DAY NOTE", "WEIGHT TREND", "Weekly check-in အားလုံး"]) {
     assert.match(detailPage, new RegExp(label));
   }
+  assert.match(detailPage, /semanticTrackerValue/);
+  assert.match(detailPage, /selectedSteps/);
+  assert.match(detailPage, /selectedSleep/);
+  assert.match(detailPage, /trackerPhotos/);
   const data = await read("src/lib/data.ts");
   for (const table of ["coaching_daily_trackers", "coaching_weekly_checkins", "coaching_workouts", "coaching_custom_tracker_templates", "coaching_nutrition_logs"]) {
     assert.match(data, new RegExp(`from\\(\"${table}\"\\)`));
   }
+  assert.match(data, /Object\.values\(tracker\.tracker_values/);
+  assert.match(data, /createSignedUrls\(privatePaths, 900\)/);
+  assert.match(data, /tracker_values: Object\.fromEntries/);
 
   const seed = await read("supabase/demo/seed-coaching-progress-demo.sql");
   assert.match(seed, /phyodynamics@gmail\.com/);

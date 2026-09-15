@@ -339,11 +339,18 @@ export async function getCoachingClientProgress(clientId: string) {
     : { data: [], error: null };
   if (exerciseError) throw exerciseError;
 
+  const trackerPhotos = (trackers.data ?? []).flatMap((tracker) => {
+    const values = tracker.tracker_values && typeof tracker.tracker_values === "object" && !Array.isArray(tracker.tracker_values)
+      ? Object.values(tracker.tracker_values as Record<string, unknown>)
+      : [];
+    return values.filter((value): value is string => typeof value === "string" && Boolean(privateCoachingPath(value)));
+  });
   const rawPhotos = [
     registration.data?.photo_front,
     registration.data?.photo_back,
     registration.data?.photo_side,
     ...(checkins.data ?? []).map((checkin) => checkin.progress_photo_url),
+    ...trackerPhotos,
   ];
   const privatePaths = [...new Set(rawPhotos.map(privateCoachingPath).filter((path): path is string => Boolean(path)))];
   const signedByPath = new Map<string, string>();
@@ -380,7 +387,18 @@ export async function getCoachingClientProgress(clientId: string) {
     template: template.data,
     bodyProfile: bodyProfile.data,
     schedule: schedule.data ?? [],
-    trackers: trackers.data ?? [],
+    trackers: (trackers.data ?? []).map((tracker) => {
+      const values = tracker.tracker_values && typeof tracker.tracker_values === "object" && !Array.isArray(tracker.tracker_values)
+        ? tracker.tracker_values as Record<string, unknown>
+        : {};
+      return {
+        ...tracker,
+        tracker_values: Object.fromEntries(Object.entries(values).map(([key, value]) => [
+          key,
+          typeof value === "string" && privateCoachingPath(value) ? photoUrl(value) : value,
+        ])),
+      };
+    }),
     checkins: (checkins.data ?? []).map((checkin) => ({ ...checkin, progressPhotoUrl: photoUrl(checkin.progress_photo_url) })),
     workouts: (workouts.data ?? []).map((workout) => ({ ...workout, exercises: exercisesByWorkout.get(workout.id) ?? [] })),
     journals: journals.data ?? [],
