@@ -173,6 +173,18 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
     });
   }
 
+  function initializeDay() {
+    startTransition(async () => {
+      const result = await duplicateCoachingMealDay({ userId: clientId, sourceDate: planDate, targetDate: planDate });
+      setOk(result.ok);
+      setMessage(result.message);
+      if (result.ok) {
+        fresh(mealType, clientId, planDate);
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.hero}>
@@ -223,13 +235,13 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
         <section className={styles.panel}>
           <div className={styles.panelHead}>
             <div><p className={styles.kicker}>{labels[mealType]}</p><h2>ထည့်ထားတဲ့ အစားအစာ</h2></div>
-            <button type="button" className={styles.secondary} onClick={() => fresh()}><Plus size={16} />အသစ်ထည့်မယ်</button>
+            <button type="button" className={styles.secondary} onClick={() => usingDefaults ? initializeDay() : fresh()}><Plus size={16} />{usingDefaults ? "ဒီရက် Plan စမယ်" : "အသစ်ထည့်မယ်"}</button>
           </div>
           <div className={styles.panelBody}>
-            {usingDefaults ? <div className={styles.help}><strong>အရင် Meal Plan ကို reference အဖြစ်ပြထားပါတယ်</strong><br />Card ကိုနှိပ်ပြီး သိမ်းလိုက်ရင် {planDate} အတွက် သီးသန့် copy ဖြစ်သွားပါမယ်။</div> : null}
+            {usingDefaults ? <div className={styles.help}><strong>အရင် Meal Plan ကို reference အဖြစ်ပြထားပါတယ်</strong><br />ရက်အလိုက် သီးသန့်ပြင်မယ်ဆို အောက်ကခလုတ်ကို အရင်နှိပ်ပါ။<button type="button" className={styles.inlineCopy} disabled={pending} onClick={initializeDay}><Copy size={15}/>{planDate} အတွက် Plan copy လုပ်မယ်</button></div> : null}
             <div className={styles.mealGrid}>
               {visible.length ? visible.map((item) => (
-                <button type="button" className={styles.mealCard} key={item.id} onClick={() => edit(item)}>
+                <button type="button" className={styles.mealCard} key={item.id} onClick={() => usingDefaults ? initializeDay() : edit(item)}>
                   <span className={styles.mealCardCopy}>
                     <strong>{item.food_name_mm || item.food_name}</strong>
                     <small>{item.food_name_mm ? item.food_name : item.portion || "Portion မသတ်မှတ်ရသေး"}</small>

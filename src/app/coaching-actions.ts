@@ -237,7 +237,7 @@ export async function duplicateCoachingMealDay(input: unknown) {
     userId: z.string().uuid(),
     sourceDate: z.iso.date(),
     targetDate: z.iso.date(),
-  }).refine((value) => value.sourceDate !== value.targetDate, { message: "Source and target date must differ" }).safeParse(input);
+  }).safeParse(input);
   if (!parsed.success) return { ok: false, message: "ပွားမယ့်ရက်နဲ့ ထည့်မယ့်ရက်ကို မှန်အောင်ရွေးပေးပါ။" };
 
   const viewer = await requireAdmin();
