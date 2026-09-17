@@ -504,7 +504,7 @@ export async function getCoachingMealManagerData() {
   const [clients, items] = await Promise.all([
     getEditableCoachingClients(),
     db.from("coaching_nutrition_items")
-      .select("id,user_id,program_type,meal_type,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
+      .select("id,user_id,program_type,meal_type,plan_date,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
       .eq("program_type", "personal_coaching")
       .order("sort_order")
       .order("id"),

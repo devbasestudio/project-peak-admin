@@ -200,6 +200,7 @@ export async function saveCoachingMeal(input: unknown) {
     userId: z.string().uuid(),
     programType: z.literal("personal_coaching"),
     mealType: z.enum(["breakfast", "lunch", "snack", "dinner", "evening"]),
+    planDate: z.iso.date(),
     foodName: z.string().trim().min(1).max(180),
     foodNameMm: z.string().trim().max(180).default(""),
     portion: z.string().trim().max(180).default(""),
@@ -216,6 +217,7 @@ export async function saveCoachingMeal(input: unknown) {
   const row = {
     user_id: parsed.data.userId,
     program_type: parsed.data.programType, meal_type: parsed.data.mealType,
+    plan_date: parsed.data.planDate,
     food_name: parsed.data.foodName, food_name_mm: parsed.data.foodNameMm || null,
     portion: parsed.data.portion || null, calories: parsed.data.calories,
     protein_g: parsed.data.protein, carbs_g: parsed.data.carbs, fat_g: parsed.data.fat,
@@ -228,6 +230,51 @@ export async function saveCoachingMeal(input: unknown) {
   await writeAudit(viewer.session.id, "coaching.meal.save", "coaching_nutrition_item", String(result.data.id));
   revalidatePath("/coaching/meals");
   return { ok: true, message: "Meal plan သိမ်းပြီးပါပြီ။ Client app မှာပြန်ပေါ်ပါမယ်။", mealId: result.data.id };
+}
+
+export async function duplicateCoachingMealDay(input: unknown) {
+  const parsed = z.object({
+    userId: z.string().uuid(),
+    sourceDate: z.iso.date(),
+    targetDate: z.iso.date(),
+  }).refine((value) => value.sourceDate !== value.targetDate, { message: "Source and target date must differ" }).safeParse(input);
+  if (!parsed.success) return { ok: false, message: "ပွားမယ့်ရက်နဲ့ ထည့်မယ့်ရက်ကို မှန်အောင်ရွေးပေးပါ။" };
+
+  const viewer = await requireAdmin();
+  const db = createAdminClient();
+  const { data: source, error: sourceError } = await db.from("coaching_nutrition_items")
+    .select("program_type,meal_type,plan_date,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
+    .eq("user_id", parsed.data.userId)
+    .eq("program_type", "personal_coaching")
+    .or(`plan_date.eq.${parsed.data.sourceDate},plan_date.is.null`)
+    .order("sort_order")
+    .order("id");
+  if (sourceError) return { ok: false, message: "လက်ရှိရက် Meal Plan ကို ဖတ်မရပါ။" };
+  if (!source?.length) return { ok: false, message: "ဒီရက်မှာ ပွားစရာ Meal မရှိသေးပါ။ အရင်ဆုံး Meal တစ်ခုသိမ်းပေးပါ။" };
+  const activeSource = (["breakfast", "lunch", "snack", "dinner", "evening"] as const).flatMap((mealType) => {
+    const dated = source.filter((item) => item.meal_type === mealType && item.plan_date === parsed.data.sourceDate);
+    return dated.length ? dated : source.filter((item) => item.meal_type === mealType && !item.plan_date);
+  });
+
+  const { count, error: targetError } = await db.from("coaching_nutrition_items")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", parsed.data.userId)
+    .eq("program_type", "personal_coaching")
+    .eq("plan_date", parsed.data.targetDate);
+  if (targetError) return { ok: false, message: "ထည့်မယ့်ရက်ကို စစ်မရပါ။" };
+  if ((count ?? 0) > 0) return { ok: false, message: "ထည့်မယ့်ရက်မှာ Meal Plan ရှိပြီးသားပါ။ မပျက်စေရန် ပွားခြင်းကို ရပ်ထားပါတယ်။" };
+
+  const rows = activeSource.map((item) => ({ ...item, user_id: parsed.data.userId, plan_date: parsed.data.targetDate }));
+  const { error } = await db.from("coaching_nutrition_items").insert(rows);
+  if (error) return { ok: false, message: "Meal Plan ကို ရက်အသစ်ဆီ မပွားနိုင်သေးပါ။" };
+
+  await writeAudit(viewer.session.id, "coaching.meal_day.duplicate", "coaching_profile", parsed.data.userId, {
+    sourceDate: parsed.data.sourceDate,
+    targetDate: parsed.data.targetDate,
+    itemCount: rows.length,
+  });
+  revalidatePath("/coaching/meals");
+  return { ok: true, message: `${parsed.data.targetDate} ရက်အတွက် Meal ${rows.length} ခု ပွားပြီးပါပြီ။` };
 }
 
 export async function deleteCoachingMeal(input: unknown) {

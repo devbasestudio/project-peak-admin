@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Check, Pencil, Plus, Save, Trash2 } from "lucide-react";
+import { CalendarDays, Check, Copy, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { deleteCoachingMeal, saveCoachingMeal } from "@/app/coaching-actions";
+import { deleteCoachingMeal, duplicateCoachingMealDay, saveCoachingMeal } from "@/app/coaching-actions";
 import styles from "./content-managers.module.css";
 
 type MealType = "breakfast" | "lunch" | "snack" | "dinner" | "evening";
@@ -12,6 +12,7 @@ type Meal = {
   user_id: string | null;
   program_type: string;
   meal_type: MealType;
+  plan_date: string | null;
   food_name: string;
   food_name_mm: string | null;
   portion: string | null;
@@ -27,6 +28,7 @@ type MealForm = {
   userId: string;
   programType: "personal_coaching";
   mealType: MealType;
+  planDate: string;
   foodName: string;
   foodNameMm: string;
   portion: string;
@@ -52,10 +54,22 @@ const labels: Record<MealType, string> = {
   evening: "ညပိုင်း",
 };
 const mealTypes = Object.keys(labels) as MealType[];
-const blank = (userId: string, mealType: MealType): MealForm => ({
+function localDate() {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function addDays(value: string, days: number) {
+  const date = new Date(`${value}T00:00:00`);
+  date.setDate(date.getDate() + days);
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+const blank = (userId: string, mealType: MealType, planDate = localDate()): MealForm => ({
   userId,
   programType: "personal_coaching",
   mealType,
+  planDate,
   foodName: "",
   foodNameMm: "",
   portion: "",
@@ -71,23 +85,28 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
   const router = useRouter();
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [mealType, setMealType] = useState<MealType>("breakfast");
-  const [form, setForm] = useState<MealForm>(blank(clients[0]?.id ?? "", "breakfast"));
+  const [planDate, setPlanDate] = useState(localDate);
+  const [copyDate, setCopyDate] = useState(() => addDays(localDate(), 1));
+  const [form, setForm] = useState<MealForm>(() => blank(clients[0]?.id ?? "", "breakfast", localDate()));
   const [message, setMessage] = useState("");
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
-  const clientItems = useMemo(() => items.filter((item) => item.user_id === clientId && item.meal_type === mealType), [clientId, items, mealType]);
-  const defaultItems = useMemo(() => items.filter((item) => item.user_id === null && item.meal_type === mealType), [items, mealType]);
-  const usingDefaults = clientItems.length === 0 && defaultItems.length > 0;
+  const datedClientItems = useMemo(() => items.filter((item) => item.user_id === clientId && item.plan_date === planDate && item.meal_type === mealType), [clientId, items, mealType, planDate]);
+  const legacyClientItems = useMemo(() => items.filter((item) => item.user_id === clientId && !item.plan_date && item.meal_type === mealType), [clientId, items, mealType]);
+  const clientItems = datedClientItems.length ? datedClientItems : legacyClientItems;
+  const defaultItems = useMemo(() => items.filter((item) => item.user_id === null && (!item.plan_date || item.plan_date === planDate) && item.meal_type === mealType), [items, mealType, planDate]);
+  const usingDefaults = datedClientItems.length === 0 && (legacyClientItems.length > 0 || defaultItems.length > 0);
   const visible = clientItems.length ? clientItems : defaultItems;
   const selectedClient = clients.find((client) => client.id === clientId);
   const selectedClientName = selectedClient?.registration?.name || selectedClient?.username || selectedClient?.email || "Client ရွေးပါ";
 
   function edit(item: Meal) {
     setForm({
-      id: item.user_id ? item.id : undefined,
+      id: item.user_id && item.plan_date === planDate ? item.id : undefined,
       userId: clientId,
       programType: "personal_coaching",
       mealType: item.meal_type,
+      planDate,
       foodName: item.food_name,
       foodNameMm: item.food_name_mm || "",
       portion: item.portion || "",
@@ -101,14 +120,20 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
     setMessage("");
   }
 
-  function fresh(nextType = mealType, nextClientId = clientId) {
-    setForm(blank(nextClientId, nextType));
+  function fresh(nextType = mealType, nextClientId = clientId, nextDate = planDate) {
+    setForm(blank(nextClientId, nextType, nextDate));
     setMessage("");
   }
 
   function chooseMealType(nextType: MealType) {
     setMealType(nextType);
     fresh(nextType);
+  }
+
+  function chooseDate(nextDate: string) {
+    setPlanDate(nextDate);
+    setCopyDate(addDays(nextDate, 1));
+    fresh(mealType, clientId, nextDate);
   }
 
   function save() {
@@ -133,6 +158,21 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
     });
   }
 
+
+  function duplicateDay() {
+    startTransition(async () => {
+      const result = await duplicateCoachingMealDay({ userId: clientId, sourceDate: planDate, targetDate: copyDate });
+      setOk(result.ok);
+      setMessage(result.message);
+      if (result.ok) {
+        setPlanDate(copyDate);
+        setCopyDate(addDays(copyDate, 1));
+        fresh(mealType, clientId, copyDate);
+        router.refresh();
+      }
+    });
+  }
+
   return (
     <div className={styles.page}>
       <header className={styles.hero}>
@@ -146,7 +186,7 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
 
       <ol className={styles.steps} aria-label="Meal plan အသုံးပြုနည်း">
         <li><b>1</b><span><strong>Client ရွေးပါ</strong><small>{selectedClient?.email || "Approved Client ကိုရွေးပါ"}</small></span></li>
-        <li><b>2</b><span><strong>အချိန်နဲ့ Meal ရွေးပါ</strong><small>မနက်စာ၊ နေ့လယ်စာ စသည်</small></span></li>
+        <li><b>2</b><span><strong>ရက်နဲ့ Meal ရွေးပါ</strong><small>{planDate} · {labels[mealType]}</small></span></li>
         <li><b>3</b><span><strong>ပြင်ပြီး သိမ်းပါ</strong><small>{selectedClientName} ရဲ့ app မှာပေါ်ပါမယ်</small></span></li>
       </ol>
 
@@ -156,6 +196,10 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
           <select value={clientId} onChange={(event) => { const nextClientId = event.target.value; setClientId(nextClientId); fresh(mealType, nextClientId); }}>
             {clients.length ? clients.map((client) => <option key={client.id} value={client.id}>{client.registration?.name || client.username || client.email} · {client.email}</option>) : <option value="">Approved Client မရှိသေးပါ</option>}
           </select>
+        </label>
+        <label className={`${styles.field} ${styles.datePicker}`}>
+          <span>ဘယ်ရက်အတွက်လဲ?</span>
+          <input type="date" value={planDate} onChange={(event) => chooseDate(event.target.value)} />
         </label>
         <div className={styles.mealTypeControls}>
           <div className={styles.mealTypeIntro}><span>အခု ပြင်နေသည်</span><strong>{selectedClientName}</strong></div>
@@ -169,6 +213,12 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
         </div>
       </section>
 
+      {clients.length ? <section className={styles.copyBar}>
+        <span><CalendarDays size={19}/><span><strong>{planDate} Meal Plan</strong><small>တခြားရက်မှာ အတူတူစားမယ်ဆို တစ်ချက်နှိပ်ပြီးပွားနိုင်ပါတယ်။</small></span></span>
+        <label className={styles.field}><span>ပွားထည့်မယ့်ရက်</span><input type="date" value={copyDate} onChange={(event) => setCopyDate(event.target.value)} /></label>
+        <button type="button" className={styles.secondary} disabled={pending || !clientId || !copyDate || copyDate === planDate} onClick={duplicateDay}><Copy size={16}/>{pending ? "ပွားနေတယ်…" : "ဒီရက် Meal အားလုံး ပွားမယ်"}</button>
+      </section> : null}
+
       {clients.length === 0 ? <div className={styles.empty}>Payment approve လုပ်ထားတဲ့ 1:1 Client မရှိသေးပါ။ Clients မှာ approve အရင်လုပ်ပေးပါ။</div> : <div className={`${styles.layout} ${styles.mealLayout}`}>
         <section className={styles.panel}>
           <div className={styles.panelHead}>
@@ -176,7 +226,7 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
             <button type="button" className={styles.secondary} onClick={() => fresh()}><Plus size={16} />အသစ်ထည့်မယ်</button>
           </div>
           <div className={styles.panelBody}>
-            {usingDefaults ? <div className={styles.help}><strong>Default meal ကိုပြထားပါတယ်</strong><br />Card ကိုနှိပ်ပြီး သိမ်းလိုက်ရင် {selectedClientName} အတွက် သီးသန့် copy ဖြစ်သွားပါမယ်။</div> : null}
+            {usingDefaults ? <div className={styles.help}><strong>အရင် Meal Plan ကို reference အဖြစ်ပြထားပါတယ်</strong><br />Card ကိုနှိပ်ပြီး သိမ်းလိုက်ရင် {planDate} အတွက် သီးသန့် copy ဖြစ်သွားပါမယ်။</div> : null}
             <div className={styles.mealGrid}>
               {visible.length ? visible.map((item) => (
                 <button type="button" className={styles.mealCard} key={item.id} onClick={() => edit(item)}>

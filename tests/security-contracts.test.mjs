@@ -83,7 +83,7 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   for (const route of ["/exercises", "/coaching/workouts", "/coaching/meals", "/coaching/feedback-forms"]) assert.match(shell, new RegExp(route));
   assert.doesNotMatch(shell, /href: "\/coaching\/exercises"/);
   const actions = await read("src/app/coaching-actions.ts");
-  for (const action of ["saveCoachingWorkout", "duplicateCoachingWorkout", "saveCoachingMeal", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
+  for (const action of ["saveCoachingWorkout", "duplicateCoachingWorkout", "saveCoachingMeal", "duplicateCoachingMealDay", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
   assert.doesNotMatch(actions, /saveCoachingExerciseLibraryItem/);
   for (const table of ["coaching_workouts", "coaching_workout_exercises", "coaching_nutrition_items", "coaching_feedback_form_templates"]) assert.match(actions, new RegExp(`from\\(\\\"${table}\\\"\\)`));
   assert.match(actions, /await requireAdmin\(\)/);
@@ -127,7 +127,11 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(meals, /clients\.map/);
   assert.doesNotMatch(meals, /ဘယ် Program အတွက်လဲ/);
   assert.doesNotMatch(meals, /programTypes/);
-  for (const step of ["Client ရွေးပါ", "အချိန်နဲ့ Meal ရွေးပါ", "ပြင်ပြီး သိမ်းပါ"]) assert.match(meals, new RegExp(step));
+  for (const step of ["Client ရွေးပါ", "ရက်နဲ့ Meal ရွေးပါ", "ပြင်ပြီး သိမ်းပါ"]) assert.match(meals, new RegExp(step));
+  assert.match(meals, /ဒီရက် Meal အားလုံး ပွားမယ်/);
+  assert.match(actions, /plan_date: parsed\.data\.planDate/);
+  const datedMealsMigration = await read("supabase/migrations/20260917090000_add_dated_coaching_meal_plans.sql");
+  assert.match(datedMealsMigration, /add column if not exists plan_date date/);
   assert.match(actions, /userId: z\.string\(\)\.uuid\(\)/);
   assert.match(actions, /user_id: parsed\.data\.userId/);
 });
