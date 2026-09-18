@@ -25,6 +25,24 @@ const blankExercise = (categoryId = ""): ExerciseForm => ({
   defaultSets: 3, defaultRepsMin: 8, defaultRepsMax: 12, defaultRestSeconds: 90, sortOrder: 0,
 });
 
+const MAX_VIDEO_BYTES = 75 * 1024 * 1024;
+const VIDEO_MIME_TYPES = new Set(["video/mp4", "video/webm", "video/quicktime"]);
+
+function normalizedVideoType(file: File) {
+  const type = file.type.split(";", 1)[0].trim().toLowerCase();
+  if (VIDEO_MIME_TYPES.has(type)) return type;
+  const extension = file.name.trim().toLowerCase().split(".").pop();
+  if ((type === "" || type === "application/octet-stream" || type === "video/x-m4v") && extension === "mov") return "video/quicktime";
+  if ((type === "" || type === "application/octet-stream" || type === "video/x-m4v") && (extension === "mp4" || extension === "m4v")) return "video/mp4";
+  if ((type === "" || type === "application/octet-stream") && extension === "webm") return "video/webm";
+  return null;
+}
+
+async function responseJson(response: Response) {
+  if (!response.headers.get("content-type")?.includes("application/json")) return {};
+  return response.json().catch(() => ({})) as Promise<{ error?: string; signedUrl?: string; path?: string; mimeType?: string }>;
+}
+
 export function SharedExerciseManager({ categories, exercises }: { categories: Category[]; exercises: Exercise[] }) {
   const router = useRouter();
   const [categoryName, setCategoryName] = useState("");
@@ -79,15 +97,51 @@ export function SharedExerciseManager({ categories, exercises }: { categories: C
     if (!file) return;
     const key = `${exerciseId}:${role}`;
     setUploading(key); setMessage("");
+    let uploadedPath = "";
     try {
-      const body = new FormData();
-      body.set("intent", "shared-exercise-video"); body.set("exerciseId", exerciseId); body.set("role", role); body.set("file", file);
-      const response = await fetch("/api/admin/upload", { method: "POST", body });
-      const result = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(result.error || "Video upload မအောင်မြင်ပါ");
+      const mimeType = normalizedVideoType(file);
+      if (!mimeType) throw new Error("MP4, WebM သို့မဟုတ် MOV video ပဲတင်ပေးပါ။");
+      if (file.size <= 0 || file.size > MAX_VIDEO_BYTES) throw new Error("Video file ကို 75MB အောက်ရွေးပေးပါ။");
+
+      const grantResponse = await fetch("/api/admin/exercise-video-upload", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ exerciseId, role, fileName: file.name, mimeType, byteSize: file.size }),
+      });
+      const grant = await responseJson(grantResponse);
+      if (!grantResponse.ok || !grant.signedUrl || !grant.path || !grant.mimeType) {
+        throw new Error(grant.error || "Video upload စတင်မရသေးပါ။");
+      }
+      uploadedPath = grant.path;
+
+      const uploadBody = new FormData();
+      uploadBody.append("cacheControl", "31536000");
+      const uploadFile = file.type === grant.mimeType ? file : new Blob([file], { type: grant.mimeType });
+      uploadBody.append("file", uploadFile, file.name);
+      const uploadResponse = await fetch(grant.signedUrl, {
+        method: "PUT",
+        headers: { "x-upsert": "false" },
+        body: uploadBody,
+      });
+      if (!uploadResponse.ok) throw new Error("Video ပို့မရသေးပါ။ Connection ကိုစစ်ပြီး ပြန်စမ်းပါ။");
+
+      const finishResponse = await fetch("/api/admin/exercise-video-upload", {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ exerciseId, role, path: grant.path, fileName: file.name, mimeType: grant.mimeType, byteSize: file.size }),
+      });
+      const result = await responseJson(finishResponse);
+      if (!finishResponse.ok) throw new Error(result.error || "Video ကို Exercise နဲ့ မချိတ်နိုင်သေးပါ။");
       setSuccess(true); setMessage("Video တစ်ခါတည်းတင်ပြီး Home Workout နဲ့ 1:1 နှစ်ခုလုံးအတွက် ချိတ်ပြီးပါပြီ။");
       router.refresh();
     } catch (error) {
+      if (uploadedPath) {
+        await fetch("/api/admin/exercise-video-upload", {
+          method: "DELETE",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ exerciseId, role, path: uploadedPath }),
+        }).catch(() => undefined);
+      }
       setSuccess(false); setMessage(error instanceof Error ? error.message : "Video upload မအောင်မြင်ပါ");
     } finally { setUploading(""); }
   }
@@ -132,7 +186,7 @@ export function SharedExerciseManager({ categories, exercises }: { categories: C
         <div className={styles.meta}><span>{exercise.default_sets} sets</span><span>{exercise.default_reps_min}–{exercise.default_reps_max} reps</span><span>{exercise.default_rest_seconds}s rest</span></div>
         <div className={styles.videoGrid}>{(["primary", "alternative"] as const).map((role) => { const video = exercise.videos.find((item) => item.role === role); const key = `${exercise.id}:${role}`; return <div className={styles.videoSlot} data-has-video={Boolean(video)} key={role}>
           <div className={styles.preview}>{video ? preview === key ? <video controls playsInline preload="metadata" src={video.preview_url}/> : <button type="button" onClick={() => setPreview(key)}><Play fill="currentColor" size={19}/><span>Preview ကြည့်မယ်</span></button> : <div className={styles.emptyVideo}><Film size={22}/><strong>{role === "primary" ? "Form Video မရှိသေးပါ" : "အစားထိုး Video မရှိသေးပါ"}</strong><small>MP4, WebM သို့မဟုတ် MOV</small></div>}</div>
-          <div><span><strong>{role === "primary" ? "1 · အဓိက Form Video" : "2 · အစားထိုး Video"}</strong><small>{video ? "တင်ပြီး · ပြောင်းလို့ရပါတယ်" : role === "primary" ? "Client အရင်မြင်မယ့် Video" : "မတတ်သူအတွက် Optional"}</small></span><label aria-label={`${exercise.name_en} ${role} video ရွေးမယ်`}><Upload size={15}/><span>{uploading === key ? "တင်နေတယ်…" : video ? "Video ပြောင်းမယ်" : "Video ရွေးမယ်"}</span><input type="file" accept="video/mp4,video/webm,video/quicktime" disabled={Boolean(uploading)} onChange={(event) => void uploadVideo(exercise.id, role, event.target.files?.[0])}/></label></div>
+          <div><span><strong>{role === "primary" ? "1 · အဓိက Form Video" : "2 · အစားထိုး Video"}</strong><small>{video ? "တင်ပြီး · ပြောင်းလို့ရပါတယ်" : role === "primary" ? "Client အရင်မြင်မယ့် Video" : "မတတ်သူအတွက် Optional"}</small></span><label aria-label={`${exercise.name_en} ${role} video ရွေးမယ်`}><Upload size={15}/><span>{uploading === key ? "တင်နေတယ်…" : video ? "Video ပြောင်းမယ်" : "Video ရွေးမယ်"}</span><input type="file" accept=".mp4,.mov,.m4v,.webm,video/mp4,video/webm,video/quicktime" disabled={Boolean(uploading)} onChange={(event) => { const file = event.currentTarget.files?.[0]; event.currentTarget.value = ""; void uploadVideo(exercise.id, role, file); }}/></label></div>
         </div>; })}</div>
       </article>)}</div>
       {!visible.length ? <div className={styles.empty}>ဒီ Category ထဲမှာ Exercise မရှိသေးပါ။ “Exercise အသစ်” ကိုနှိပ်ပြီး စပါ။</div> : null}

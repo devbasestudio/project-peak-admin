@@ -102,7 +102,6 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(cloneMigration, /revoke all .* authenticated/);
   assert.match(cloneMigration, /grant execute .* service_role/);
   const library = await read("src/components/admin/shared-exercise-manager.tsx");
-  assert.match(library, /shared-exercise-video/);
   assert.match(library, /Category အသစ်ထည့်မယ်/);
   assert.match(library, /Home Workout နဲ့ 1:1 Workout နှစ်ခုလုံး/);
   assert.match(library, /primary", "alternative/);
@@ -112,6 +111,14 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(upload, /program-media/);
   assert.match(upload, /requireAdminSession/);
   assert.match(upload, /isAllowedOrigin/);
+  const signedVideoUpload = await read("src/app/api/admin/exercise-video-upload/route.ts");
+  assert.match(signedVideoUpload, /createSignedUploadUrl/);
+  assert.match(signedVideoUpload, /requireAdminSession/);
+  assert.match(signedVideoUpload, /isAllowedOrigin/);
+  assert.match(signedVideoUpload, /shared_exercise_videos/);
+  assert.match(signedVideoUpload, /MAX_VIDEO_BYTES/);
+  assert.match(library, /exercise-video-upload/);
+  assert.doesNotMatch(library, /body\.set\("file"/);
   const feedback = await read("src/components/coaching/feedback-form-manager.tsx");
   assert.match(feedback, /မေးခွန်းစာသား/);
   assert.match(feedback, /မေးခွန်းထည့်မယ်/);
