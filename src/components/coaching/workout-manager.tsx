@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CalendarPlus, Dumbbell, Plus, Save, Trash2 } from "lucide-react";
-import { duplicateCoachingWorkout, saveCoachingWorkout } from "@/app/coaching-actions";
+import { CalendarCheck, Dumbbell, Plus, Save, Trash2 } from "lucide-react";
+import { assignCoachingWorkoutToDates, saveCoachingWorkout } from "@/app/coaching-actions";
+import { MultiDatePicker } from "./multi-date-picker";
 import styles from "./content-managers.module.css";
 
 type Client={id:string;username:string;email:string;registration?:{name?:string|null}|null};
@@ -19,6 +20,7 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
   const [clientId,setClientId]=useState(clients[0]?.id??"");
   const [workoutId,setWorkoutId]=useState<number>();
   const [date,setDate]=useState(today);
+  const [targetDates,setTargetDates]=useState<string[]>([]);
   const [splitName,setSplitName]=useState("Full Body");
   const [exercises,setExercises]=useState<EditExercise[]>([blankExercise()]);
   const [message,setMessage]=useState("");
@@ -31,10 +33,11 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
 
   function selectWorkout(row:Workout){
     setWorkoutId(row.id);setDate(row.date);setSplitName(row.split_name);
+    setTargetDates([]);
     setExercises(row.exercises.length?row.exercises.map(ex=>{const libraryExercise=library.find(item=>item.id===ex.shared_exercise_id||item.name_en.toLocaleLowerCase()===ex.exercise_name.toLocaleLowerCase());return {id:ex.id,libraryExerciseId:ex.shared_exercise_id??libraryExercise?.id??"",exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12",restSeconds:ex.rest_seconds??libraryExercise?.default_rest_seconds??90};}):[blankExercise()]);
     setMessage("");
   }
-  function fresh(){setWorkoutId(undefined);setDate(today);setSplitName("Full Body");setExercises([blankExercise()]);setMessage("");}
+  function fresh(){setWorkoutId(undefined);setDate(today);setTargetDates([]);setSplitName("Full Body");setExercises([blankExercise()]);setMessage("");}
   function pickExercise(index:number,libraryExerciseId:string){
     const selected=library.find(item=>item.id===libraryExerciseId);
     setExercises(rows=>rows.map((row,position)=>position===index?{...row,libraryExerciseId,exerciseName:selected?.name_en??"",targetSets:selected?.default_sets??row.targetSets,targetReps:selected?`${selected.default_reps_min}-${selected.default_reps_max}`:row.targetReps,restSeconds:selected?.default_rest_seconds??row.restSeconds}:row));
@@ -42,28 +45,24 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
   function save(){
     setMessage("");
     startTransition(async()=>{
-      const result=await saveCoachingWorkout({id:workoutId,userId:clientId,date,splitName,exercises});
+      const result=await saveCoachingWorkout({id:workoutId,userId:clientId,date,targetDates:workoutId?[]:targetDates,splitName,exercises});
       setOk(result.ok);setMessage(result.message);
-      if(result.ok&&result.workoutId){setWorkoutId(result.workoutId);router.refresh();}
+      if(result.ok&&result.workoutId){setWorkoutId(result.workoutId);setTargetDates([]);router.refresh();}
     });
   }
-  function duplicateNextWeek(){
+  function assignDates(){
     if(!workoutId)return;
     setMessage("");
     startTransition(async()=>{
-      const result=await duplicateCoachingWorkout({workoutId});
+      const result=await assignCoachingWorkoutToDates({workoutId,targetDates});
       setOk(result.ok);setMessage(result.message);
-      if(result.ok&&result.workoutId&&result.date&&result.exercises){
-        setWorkoutId(result.workoutId);setDate(result.date);
-        setExercises(result.exercises.map(ex=>({id:ex.id,libraryExerciseId:ex.shared_exercise_id??"",exerciseName:ex.exercise_name,targetSets:ex.target_sets??3,targetReps:ex.target_reps??"8-12",restSeconds:ex.rest_seconds??90})));
-        router.refresh();
-      }
+      if(result.ok){setTargetDates([]);router.refresh();}
     });
   }
 
   return <div className={styles.page}>
-    <header className={styles.hero}><div><p>1:1 COACHING · WORKOUTS</p><h1>Workout ကို ရက်အလိုက်ပြင်မယ်</h1><span>Client ရွေး၊ ဆော့မယ့်ရက်ရွေး၊ Library ထဲက exercise ကို dropdown နဲ့ရွေးပြီး Save နှိပ်ရုံပါ။</span></div>{message?<div className={styles.status} data-ok={ok}>{message}</div>:null}</header>
-    <ol className={styles.steps}><li><b>1</b><span><strong>Client ရွေးမယ်</strong><small>{selectedClient?.email||"—"}</small></span></li><li><b>2</b><span><strong>ရက်နဲ့ Session</strong><small>{date} · {splitName}</small></span></li><li><b>3</b><span><strong>Exercise သိမ်းမယ်</strong><small>{exercises.length} exercises</small></span></li></ol>
+    <header className={styles.hero}><div><p>1:1 COACHING · WORKOUTS</p><h1>Workout ကို ရက်အလိုက်ပြင်မယ်</h1><span>Client ရွေး၊ Session တစ်ခုစီစဉ်ပြီး Calendar မှာ ရက်အများကြီးရွေးကာ တစ်ခါတည်းထည့်နိုင်ပါတယ်။</span></div>{message?<div className={styles.status} data-ok={ok}>{message}</div>:null}</header>
+    <ol className={styles.steps}><li><b>1</b><span><strong>Client ရွေးမယ်</strong><small>{selectedClient?.email||"—"}</small></span></li><li><b>2</b><span><strong>ရက်များရွေးမယ်</strong><small>{date}{targetDates.length?` + ${targetDates.length} ရက်`:""} · {splitName}</small></span></li><li><b>3</b><span><strong>တစ်ခါတည်း သိမ်းမယ်</strong><small>{exercises.length} exercises</small></span></li></ol>
     {clients.length===0?<div className={styles.empty}>Payment approve လုပ်ထားတဲ့ 1:1 client မရှိသေးပါ။</div>:<div className={styles.layout}>
       <aside className={styles.panel}>
         <div className={styles.panelHead}><div><p className={styles.kicker}>CLIENT + HISTORY</p><h2>ဘယ်သူ့ Plan လဲ?</h2></div><button className={styles.secondary} onClick={fresh}>အသစ်</button></div>
@@ -71,10 +70,14 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
         <div className={styles.sessionList}>{visible.length?visible.map(row=><button className={styles.session} data-active={row.id===workoutId} key={row.id} onClick={()=>selectWorkout(row)}><time>{row.date}</time><span><strong>{row.split_name}</strong><small>{row.exercises.length} exercises · {row.completed?"ပြီး":"လုပ်ရန်"}</small></span><Dumbbell size={17}/></button>):<div className={styles.empty}>ဒီ Client အတွက် session မရှိသေးပါ။ “အသစ်” နှိပ်ပြီး စပါ။</div>}</div>
       </aside>
       <section className={styles.panel}>
-        <div className={styles.panelHead}><div><p className={styles.kicker}>{workoutId?"EDIT SESSION":"NEW SESSION"}</p><h2>{workoutId?"Workout ပြင်မယ်":"Workout အသစ်ထည့်မယ်"}</h2></div><div className={styles.headActions}>{workoutId?<button type="button" className={styles.secondary} disabled={pending||!selectedWorkout?.completed} title={selectedWorkout?.completed?"ဒီ Session ကို ၇ ရက်နောက်ပွားမယ်":"Client ဆော့ပြီး Session ပြီးမှ ပွားနိုင်ပါတယ်"} onClick={duplicateNextWeek}><CalendarPlus size={17}/>{pending?"ပွားနေတယ်…":"နောက်အပတ် ပွားမယ်"}</button>:null}<Link className={styles.link} href="/exercises">Common Exercises ပြင်မယ် →</Link></div></div>
+        <div className={styles.panelHead}><div><p className={styles.kicker}>{workoutId?"EDIT SESSION":"NEW SESSION"}</p><h2>{workoutId?"Workout ပြင်မယ်":"Workout အသစ်ထည့်မယ်"}</h2></div><div className={styles.headActions}><Link className={styles.link} href="/exercises">Common Exercises ပြင်မယ် →</Link></div></div>
         <div className={styles.panelBody}>
-          {workoutId&&!selectedWorkout?.completed?<div className={styles.help}><strong>Session ပွားမယ့်ခလုတ်ကို အပေါ်ညာဘက်မှာထားပါတယ်</strong><br/>Client က ဒီ Session ကို ဆော့ပြီးအောင်မှ “နောက်အပတ် ပွားမယ်” ခလုတ် ဖွင့်လာပါမယ်။ ပြီးရင် Exercise, Sets, Reps နဲ့ Rest time အားလုံး ၇ ရက်နောက်ကို ကူးပေးပါတယ်။</div>:null}
-          <div className={styles.row}><label className={styles.field}><span>ဆော့မယ့်ရက်</span><input type="date" value={date} onChange={event=>setDate(event.target.value)}/></label><label className={styles.field}><span>Session နာမည်</span><input value={splitName} onChange={event=>setSplitName(event.target.value)} placeholder="ဥပမာ Push A"/></label></div>
+          <div className={styles.row}><label className={styles.field}><span>ဆော့မယ့်ရက်</span><input type="date" value={date} onChange={event=>{const nextDate=event.target.value;setDate(nextDate);setTargetDates(rows=>rows.filter(row=>row!==nextDate));}}/></label><label className={styles.field}><span>Session နာမည်</span><input value={splitName} onChange={event=>setSplitName(event.target.value)} placeholder="ဥပမာ Push A"/></label></div>
+          <section className={styles.dateAssignment}>
+            <div><p className={styles.kicker}>MULTIPLE DATES</p><h3>{workoutId?"ဒီ Session ကို ဘယ်ရက်တွေမှာ ထပ်ဆော့မလဲ?":"တူညီတဲ့ Workout ကို ထပ်ထည့်မယ့်ရက်များ"}</h3><span>{workoutId?`${selectedWorkout?.split_name??splitName} Session ကို ရွေးထားတဲ့ရက်အားလုံးမှာ ထည့်ပေးပါမယ်။`:`${date} ကို source ရက်ထားပြီး ထပ်လိုတဲ့ရက်တွေကို Calendar မှာရွေးပါ။`}</span></div>
+            <MultiDatePicker key={date} selectedDates={targetDates} onChange={setTargetDates} disabledDates={[date]} initialDate={date}/>
+            {workoutId?<button type="button" className={styles.button} disabled={pending||!targetDates.length} onClick={assignDates}><CalendarCheck size={17}/>{pending?"ထည့်နေတယ်…":`${targetDates.length} ရက်ကို Workout ထည့်မယ်`}</button>:null}
+          </section>
           {library.length===0?<div className={styles.help}><strong>Exercise Library မရှိသေးပါ</strong><br/><Link className={styles.link} href="/exercises">Common Library မှာ Exercise အရင်ထည့်ပါ →</Link></div>:null}
           <div className={styles.exerciseList}>{exercises.map((exercise,index)=><div className={styles.exercise} key={exercise.id??`new-${index}`}>
             <span>{String(index+1).padStart(2,"0")}</span>
@@ -84,7 +87,7 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
             <label><span>Rest (sec)</span><input type="number" min="0" max="3600" step="5" value={exercise.restSeconds} onChange={event=>setExercises(rows=>rows.map((row,position)=>position===index?{...row,restSeconds:Number(event.target.value)}:row))}/></label>
             <button aria-label={`${exercise.exerciseName||"Exercise"} ဖယ်မယ်`} className={styles.iconButton} disabled={exercises.length===1} onClick={()=>setExercises(rows=>rows.filter((_,position)=>position!==index))}><Trash2 size={17}/></button>
           </div>)}</div>
-          <div className={styles.actions}><button className={styles.secondary} disabled={!library.length} onClick={()=>setExercises(rows=>[...rows,blankExercise()])}><Plus size={17}/>Exercise ထည့်မယ်</button><button className={styles.button} disabled={pending||!clientId||!date||!splitName.trim()||exercises.some(exercise=>!exercise.libraryExerciseId)} onClick={save}><Save size={17}/>{pending?"သိမ်းနေတယ်…":"Workout သိမ်းမယ်"}</button></div>
+          <div className={styles.actions}><button className={styles.secondary} disabled={!library.length} onClick={()=>setExercises(rows=>[...rows,blankExercise()])}><Plus size={17}/>Exercise ထည့်မယ်</button><button className={styles.button} disabled={pending||!clientId||!date||!splitName.trim()||exercises.some(exercise=>!exercise.libraryExerciseId)} onClick={save}><Save size={17}/>{pending?"သိမ်းနေတယ်…":!workoutId&&targetDates.length?`${targetDates.length+1} ရက်အတွက် Workout သိမ်းမယ်`:"Workout သိမ်းမယ်"}</button></div>
         </div>
       </section>
     </div>}

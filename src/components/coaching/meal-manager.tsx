@@ -4,6 +4,7 @@ import { useMemo, useState, useTransition } from "react";
 import { CalendarDays, Check, Copy, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { deleteCoachingMeal, duplicateCoachingMealDay, saveCoachingMeal } from "@/app/coaching-actions";
+import { MultiDatePicker } from "./multi-date-picker";
 import styles from "./content-managers.module.css";
 
 type MealType = "breakfast" | "lunch" | "snack" | "dinner" | "evening";
@@ -86,7 +87,7 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
   const [clientId, setClientId] = useState(clients[0]?.id ?? "");
   const [mealType, setMealType] = useState<MealType>("breakfast");
   const [planDate, setPlanDate] = useState(localDate);
-  const [copyDate, setCopyDate] = useState(() => addDays(localDate(), 1));
+  const [targetDates, setTargetDates] = useState<string[]>(() => [addDays(localDate(), 1)]);
   const [form, setForm] = useState<MealForm>(() => blank(clients[0]?.id ?? "", "breakfast", localDate()));
   const [message, setMessage] = useState("");
   const [ok, setOk] = useState(false);
@@ -132,7 +133,7 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
 
   function chooseDate(nextDate: string) {
     setPlanDate(nextDate);
-    setCopyDate(addDays(nextDate, 1));
+    setTargetDates([addDays(nextDate, 1)]);
     fresh(mealType, clientId, nextDate);
   }
 
@@ -159,15 +160,13 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
   }
 
 
-  function duplicateDay() {
+  function assignDates() {
     startTransition(async () => {
-      const result = await duplicateCoachingMealDay({ userId: clientId, sourceDate: planDate, targetDate: copyDate });
+      const result = await duplicateCoachingMealDay({ userId: clientId, sourceDate: planDate, targetDates });
       setOk(result.ok);
       setMessage(result.message);
       if (result.ok) {
-        setPlanDate(copyDate);
-        setCopyDate(addDays(copyDate, 1));
-        fresh(mealType, clientId, copyDate);
+        setTargetDates([]);
         router.refresh();
       }
     });
@@ -226,9 +225,9 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
       </section>
 
       {clients.length ? <section className={styles.copyBar}>
-        <span><CalendarDays size={19}/><span><strong>{planDate} Meal Plan</strong><small>တခြားရက်မှာ အတူတူစားမယ်ဆို တစ်ချက်နှိပ်ပြီးပွားနိုင်ပါတယ်။</small></span></span>
-        <label className={styles.field}><span>ပွားထည့်မယ့်ရက်</span><input type="date" value={copyDate} onChange={(event) => setCopyDate(event.target.value)} /></label>
-        <button type="button" className={styles.secondary} disabled={pending || !clientId || !copyDate || copyDate === planDate} onClick={duplicateDay}><Copy size={16}/>{pending ? "ပွားနေတယ်…" : "ဒီရက် Meal အားလုံး ပွားမယ်"}</button>
+        <span><CalendarDays size={19}/><span><strong>{planDate} Meal Plan ကို အသုံးချမယ့်ရက်များ</strong><small>တူညီတဲ့ Meal Plan စားမယ့်ရက်အားလုံးကို Calendar မှာ တစ်ခါတည်းရွေးပါ။</small></span></span>
+        <MultiDatePicker key={planDate} selectedDates={targetDates} onChange={setTargetDates} disabledDates={[planDate]} initialDate={planDate}/>
+        <button type="button" className={styles.secondary} disabled={pending || !clientId || !targetDates.length} onClick={assignDates}><Copy size={16}/>{pending ? "ထည့်နေတယ်…" : `${targetDates.length} ရက်ကို Meal Plan ထည့်မယ်`}</button>
       </section> : null}
 
       {clients.length === 0 ? <div className={styles.empty}>Payment approve လုပ်ထားတဲ့ 1:1 Client မရှိသေးပါ။ Clients မှာ approve အရင်လုပ်ပေးပါ။</div> : <div className={`${styles.layout} ${styles.mealLayout}`}>
