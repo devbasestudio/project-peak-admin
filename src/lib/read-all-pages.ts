@@ -12,3 +12,8 @@ export async function readAllPages<T>(
     if (data.length < pageSize) return rows;
   }
 }
+
+/** Preserve the query-result shape for callers combining several paged reads. */
+export async function readAllPagesResult<T>(fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>) {
+  return { data: await readAllPages(fetchPage), error: null };
+}

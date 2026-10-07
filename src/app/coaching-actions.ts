@@ -15,28 +15,11 @@ export async function reviewCoachingPayment(formData: FormData) {
   if (!parsed.success) throw new Error("Payment action မမှန်ပါ");
   const viewer = await requireAdmin();
   const db = createAdminClient();
-  const { data: registration, error } = await db.from("coaching_registrations").select("*").eq("id", parsed.data.registrationId).single();
-  if (error) throw error;
-  if (!registration.user_id) throw new Error("Google user account မရှိသေးပါ");
-
-  const now = new Date().toISOString();
-  if (parsed.data.decision === "reject") {
-    const { error: rejectError } = await db.from("coaching_registrations").update({ payment_status: "rejected", status: "rejected", updated_at: now }).eq("id", registration.id);
-    if (rejectError) throw rejectError;
-  } else {
-    const intake = registration.intake_answers && typeof registration.intake_answers === "object" && !Array.isArray(registration.intake_answers)
-      ? registration.intake_answers as Record<string, unknown>
-      : {};
-    if (intake.payment_confirmed !== true) throw new Error("Client က payment ပြီးကြောင်း အတည်မပြုရသေးပါ");
-    if (!registration.photo_front || !registration.photo_back || !registration.photo_side) throw new Error("Body photos သုံးပုံ မပြည့်သေးပါ");
-    const { error: profileError } = await db.from("coaching_profiles").update({ role: "user", updated_at: now }).eq("id", registration.user_id);
-    if (profileError) throw profileError;
-    const { error: programError } = await db.from("coaching_programs").upsert({ user_id: registration.user_id, duration_weeks: 12, program_type: "personal_coaching", start_date: now.slice(0, 10), updated_at: now }, { onConflict: "user_id" });
-    if (programError) throw programError;
-    const { error: approveError } = await db.from("coaching_registrations").update({ payment_status: "approved", status: "approved", approved_at: now, updated_at: now }).eq("id", registration.id);
-    if (approveError) throw approveError;
-  }
-  await writeAudit(viewer.session.id, `coaching.payment.${parsed.data.decision}`, "coaching_registration", String(registration.id));
+  const { error } = await db.rpc("admin_review_coaching_payment_atomic", {
+    p_registration_id: parsed.data.registrationId, p_decision: parsed.data.decision,
+  });
+  if (error) throw new Error("Payment update မအောင်မြင်ပါ။ အချက်အလက်စစ်ပြီး ပြန်စမ်းပါ။");
+  await writeAudit(viewer.session.id, `coaching.payment.${parsed.data.decision}`, "coaching_registration", String(parsed.data.registrationId)).catch(() => console.error("Payment audit write failed"));
   revalidatePath("/coaching/payments"); revalidatePath("/coaching/clients"); revalidatePath("/coaching/overview");
 }
 
@@ -85,6 +68,7 @@ const workoutExerciseSchema = z.object({
 
 export async function saveCoachingWorkout(input: unknown) {
   const parsed = z.object({
+    requestId: z.string().uuid().optional(),
     id: z.coerce.number().int().positive().optional(),
     userId: z.string().uuid(),
     date: z.iso.date(),
@@ -98,98 +82,23 @@ export async function saveCoachingWorkout(input: unknown) {
   if (!parsed.success) return { ok: false, message: "Client၊ ရက်စွဲနဲ့ exercise အချက်အလက် ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
   const viewer = await requireAdmin();
   const db = createAdminClient();
-  const requestedExerciseIds = [...new Set(parsed.data.exercises.map((exercise) => exercise.libraryExerciseId))];
-  const { data: libraryRows, error: libraryError } = await db.from("shared_exercises")
-    .select("id,name_en")
-    .in("id", requestedExerciseIds);
-  if (libraryError || (libraryRows ?? []).length !== requestedExerciseIds.length) return { ok: false, message: "Common Library ထဲက Exercise ကို ပြန်ရွေးပေးပါ။" };
-  const libraryNameById = new Map((libraryRows ?? []).map((exercise) => [exercise.id, exercise.name_en]));
-  let workoutId = parsed.data.id;
-  const targetDates = [...new Set(parsed.data.targetDates)].filter((date) => date !== parsed.data.date).sort();
-  if (!workoutId && targetDates.length) {
-    const dates = [parsed.data.date, ...targetDates].sort();
-    const { data: conflicts, error: conflictError } = await db.from("coaching_workouts")
-      .select("date")
-      .eq("user_id", parsed.data.userId)
-      .in("date", dates);
-    if (conflictError) return { ok: false, message: "ရွေးထားတဲ့ရက်တွေကို စစ်မရသေးပါ။" };
-    if (conflicts?.length) return { ok: false, message: `${conflicts.map((row) => row.date).join(", ")} ရက်မှာ Workout ရှိပြီးသားပါ။ ဘာမှ overwrite မလုပ်ထားပါ။` };
-
-    const { data: created, error: createError } = await db.from("coaching_workouts")
-      .insert(dates.map((date) => ({ user_id: parsed.data.userId, date, split_name: parsed.data.splitName, completed: false })))
-      .select("id,date");
-    if (createError || !created?.length) return { ok: false, message: "ရွေးထားတဲ့ရက်တွေမှာ Workout မသိမ်းနိုင်ပါ။" };
-    const exerciseRows = created.flatMap((workout) => parsed.data.exercises.map((exercise) => ({
-      workout_id: workout.id,
-      shared_exercise_id: exercise.libraryExerciseId,
-      exercise_name: libraryNameById.get(exercise.libraryExerciseId),
-      target_sets: exercise.targetSets,
-      target_reps: exercise.targetReps,
-      rest_seconds: exercise.restSeconds,
-    })));
-    const { error: exerciseError } = await db.from("coaching_workout_exercises").insert(exerciseRows);
-    if (exerciseError) {
-      await db.from("coaching_workouts").delete().in("id", created.map((workout) => workout.id));
-      return { ok: false, message: "Exercise တွေမသိမ်းနိုင်လို့ ရက်အားလုံးကို rollback လုပ်ထားပါတယ်။" };
-    }
-    const firstWorkout = created.find((workout) => workout.date === parsed.data.date) ?? created[0];
-    await writeAudit(viewer.session.id, "coaching.workout.multi_date_create", "coaching_workout", String(firstWorkout.id), { userId: parsed.data.userId, dates, count: created.length });
-    revalidatePath("/coaching/workouts");
-    revalidatePath(`/coaching/clients/${parsed.data.userId}`);
-    return { ok: true, message: `${created.length} ရက်အတွက် Workout တစ်ခါတည်းသိမ်းပြီးပါပြီ။`, workoutId: firstWorkout.id };
-  }
-  if (workoutId) {
-    const { data, error } = await db.from("coaching_workouts")
-      .update({ user_id: parsed.data.userId, date: parsed.data.date, split_name: parsed.data.splitName })
-      .eq("id", workoutId).select("id").single();
-    if (error || !data) return { ok: false, message: "Workout session ကို update မလုပ်နိုင်ပါ။" };
-  } else {
-    const { data, error } = await db.from("coaching_workouts")
-      .insert({ user_id: parsed.data.userId, date: parsed.data.date, split_name: parsed.data.splitName, completed: false })
-      .select("id").single();
-    if (error || !data) return { ok: false, message: "Workout session အသစ် မသိမ်းနိုင်ပါ။" };
-    workoutId = data.id;
-  }
-  const existing = await db.from("coaching_workout_exercises").select("id").eq("workout_id", workoutId);
-  if (existing.error) return { ok: false, message: "လက်ရှိ exercise တွေကို ဖတ်မရပါ။" };
-  const keptIds: number[] = [];
-  for (const exercise of parsed.data.exercises) {
-    if (exercise.id) {
-      const { error } = await db.from("coaching_workout_exercises").update({
-        shared_exercise_id: exercise.libraryExerciseId,
-        exercise_name: libraryNameById.get(exercise.libraryExerciseId),
-        target_sets: exercise.targetSets,
-        target_reps: exercise.targetReps,
-        rest_seconds: exercise.restSeconds,
-      }).eq("id", exercise.id).eq("workout_id", workoutId);
-      if (error) return { ok: false, message: `${exercise.exerciseName} ကို update မလုပ်နိုင်ပါ။` };
-      keptIds.push(exercise.id);
-    } else {
-      const { data, error } = await db.from("coaching_workout_exercises").insert({
-        workout_id: workoutId,
-        shared_exercise_id: exercise.libraryExerciseId,
-        exercise_name: libraryNameById.get(exercise.libraryExerciseId),
-        target_sets: exercise.targetSets,
-        target_reps: exercise.targetReps,
-        rest_seconds: exercise.restSeconds,
-      }).select("id").single();
-      if (error || !data) return { ok: false, message: `${exercise.exerciseName} ကို မသိမ်းနိုင်ပါ။` };
-      keptIds.push(data.id);
-    }
-  }
-  const removed = (existing.data ?? []).map((row) => row.id).filter((id) => !keptIds.includes(id));
-  if (removed.length) {
-    const { error } = await db.from("coaching_workout_exercises").delete().in("id", removed).eq("workout_id", workoutId);
-    if (error) return { ok: false, message: "ဖယ်ထားတဲ့ exercise ကို update မလုပ်နိုင်ပါ။" };
-  }
-  await writeAudit(viewer.session.id, "coaching.workout.save", "coaching_workout", String(workoutId), { userId: parsed.data.userId, date: parsed.data.date });
+  const { data, error } = await db.rpc("admin_save_coaching_workout_atomic", {
+    p_input: { ...parsed.data, requestId: parsed.data.requestId ?? crypto.randomUUID() },
+  });
+  if (error) return { ok: false, message: error.code === "23505"
+    ? "ရွေးထားတဲ့ရက်မှာ Workout ရှိပြီးသားပါ။ ဘာမှ overwrite မလုပ်ထားပါ။"
+    : "Workout မသိမ်းနိုင်ပါ။ ပြီးသား Session သို့မဟုတ် မှတ်တမ်းရှိတဲ့ Exercise ကိုပြင်မထားပါ။ ပြန်စစ်ပေးပါ။" };
+  const workoutId = Number(data.workoutId);
+  await writeAudit(viewer.session.id, "coaching.workout.save", "coaching_workout", String(workoutId), { userId: parsed.data.userId, date: parsed.data.date })
+    .catch(() => console.error("Workout audit write failed"));
   revalidatePath("/coaching/workouts");
   revalidatePath(`/coaching/clients/${parsed.data.userId}`);
-  return { ok: true, message: "Workout plan သိမ်းပြီးပါပြီ။ Client app မှာ ဒီရက်အတွက်ပြပါမယ်။", workoutId };
+  return { ok: true, message: `${data.count} ရက်အတွက် Workout သိမ်းပြီးပါပြီ။`, workoutId };
 }
 
 export async function assignCoachingWorkoutToDates(input: unknown) {
   const parsed = z.object({
+    requestId: z.string().uuid().optional(),
     workoutId: z.coerce.number().int().positive(),
     targetDates: z.array(z.iso.date()).min(1).max(31),
   }).safeParse(input);
@@ -205,28 +114,25 @@ export async function assignCoachingWorkoutToDates(input: unknown) {
   const targetDates = [...new Set(parsed.data.targetDates)].filter((date) => date !== source.date).sort();
   if (!targetDates.length) return { ok: false, message: "Source ရက်မဟုတ်တဲ့ တခြားရက်တစ်ရက်အနည်းဆုံးရွေးပါ။" };
 
-  const [{ data: sourceExercises, error: exerciseError }, { data: conflicts, error: conflictError }] = await Promise.all([
-    db.from("coaching_workout_exercises").select("shared_exercise_id,exercise_name,target_sets,target_reps,rest_seconds").eq("workout_id", source.id).order("id"),
-    db.from("coaching_workouts").select("date").eq("user_id", source.user_id).in("date", targetDates),
-  ]);
-  if (exerciseError || !sourceExercises?.length) return { ok: false, message: "Source Workout မှာ Exercise မရှိသေးပါ။" };
-  if (conflictError) return { ok: false, message: "ရွေးထားတဲ့ရက်တွေကို စစ်မရသေးပါ။" };
-  if (conflicts?.length) return { ok: false, message: `${conflicts.map((row) => row.date).join(", ")} ရက်မှာ Workout ရှိပြီးသားပါ။ ဘာမှ overwrite မလုပ်ထားပါ။` };
-
-  const { data: created, error: createError } = await db.from("coaching_workouts")
-    .insert(targetDates.map((date) => ({ user_id: source.user_id, date, split_name: source.split_name, completed: false })))
-    .select("id,date");
-  if (createError || !created?.length) return { ok: false, message: "ရွေးထားတဲ့ရက်တွေမှာ Workout မထည့်နိုင်ပါ။" };
-  const rows = created.flatMap((workout) => sourceExercises.map((exercise) => ({ ...exercise, workout_id: workout.id })));
-  const { error } = await db.from("coaching_workout_exercises").insert(rows);
-  if (error) {
-    await db.from("coaching_workouts").delete().in("id", created.map((workout) => workout.id));
-    return { ok: false, message: "Exercise တွေမသိမ်းနိုင်လို့ ရက်အားလုံးကို rollback လုပ်ထားပါတယ်။" };
+  const { data: sourceExercises, error: exerciseError } = await db.from("coaching_workout_exercises")
+    .select("shared_exercise_id,exercise_name,target_sets,target_reps,rest_seconds").eq("workout_id", source.id).order("id");
+  if (exerciseError || !sourceExercises?.length || sourceExercises.some((e) => !e.shared_exercise_id)) {
+    return { ok: false, message: "Source Workout ရဲ့ Exercise တွေကို Common Library နဲ့ ချိတ်ပေးပါ။" };
   }
-  await writeAudit(viewer.session.id, "coaching.workout.multi_date_assign", "coaching_workout", String(source.id), { targetDates, count: created.length });
+  const { data, error } = await db.rpc("admin_save_coaching_workout_atomic", { p_input: {
+    requestId: parsed.data.requestId ?? crypto.randomUUID(), userId: source.user_id,
+    date: targetDates[0], targetDates: targetDates.slice(1), strictDates: true, splitName: source.split_name,
+    exercises: sourceExercises.map((e) => ({ libraryExerciseId: e.shared_exercise_id, exerciseName: e.exercise_name,
+      targetSets: e.target_sets, targetReps: e.target_reps, restSeconds: e.rest_seconds })),
+  } });
+  if (error) return { ok: false, message: error.code === "23505"
+    ? "ရွေးထားတဲ့ရက်မှာ Workout ရှိပြီးသားပါ။ ဘာမှ overwrite မလုပ်ထားပါ။"
+    : "Workout မထည့်နိုင်ပါ။ ရက်အားလုံးကို မပြောင်းထားပါ။ ပြန်စမ်းပါ။" };
+  await writeAudit(viewer.session.id, "coaching.workout.multi_date_assign", "coaching_workout", String(source.id), { targetDates, count: data.count })
+    .catch(() => console.error("Workout assignment audit write failed"));
   revalidatePath("/coaching/workouts");
   revalidatePath(`/coaching/clients/${source.user_id}`);
-  return { ok: true, message: `${created.length} ရက်အတွက် ${source.split_name} Workout ထည့်ပြီးပါပြီ။` };
+  return { ok: true, message: `${data.count} ရက်အတွက် ${source.split_name} Workout ထည့်ပြီးပါပြီ။` };
 }
 
 export async function duplicateCoachingWorkout(input: unknown) {

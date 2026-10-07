@@ -82,13 +82,13 @@ const blank = (userId: string, mealType: MealType, planDate = localDate()): Meal
   sortOrder: 0,
 });
 
-export function MealManager({ clients, items }: { clients: Client[]; items: Meal[] }) {
+export function MealManager({ clients, items, initialClientId }: { clients: Client[]; items: Meal[]; initialClientId: string }) {
   const router = useRouter();
-  const [clientId, setClientId] = useState(clients[0]?.id ?? "");
+  const [clientId, setClientId] = useState(initialClientId);
   const [mealType, setMealType] = useState<MealType>("breakfast");
   const [planDate, setPlanDate] = useState(localDate);
   const [targetDates, setTargetDates] = useState<string[]>(() => [addDays(localDate(), 1)]);
-  const [form, setForm] = useState<MealForm>(() => blank(clients[0]?.id ?? "", "breakfast", localDate()));
+  const [form, setForm] = useState<MealForm>(() => blank(initialClientId, "breakfast", localDate()));
   const [message, setMessage] = useState("");
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
@@ -204,7 +204,7 @@ export function MealManager({ clients, items }: { clients: Client[]; items: Meal
       <section className={`${styles.panel} ${styles.mealTypePanel}`}>
         <label className={`${styles.field} ${styles.clientPicker}`}>
           <span>ဘယ် Client အတွက်လဲ?</span>
-          <select value={clientId} onChange={(event) => { const nextClientId = event.target.value; setClientId(nextClientId); fresh(mealType, nextClientId); }}>
+          <select disabled={pending} value={clientId} onChange={(event) => { const nextClientId = event.target.value; setClientId(nextClientId); fresh(mealType, nextClientId); startTransition(() => router.replace(`/coaching/meals?client=${encodeURIComponent(nextClientId)}`)); }}>
             {clients.length ? clients.map((client) => <option key={client.id} value={client.id}>{client.registration?.name || client.username || client.email} · {client.email}</option>) : <option value="">Approved Client မရှိသေးပါ</option>}
           </select>
         </label>

@@ -50,10 +50,6 @@ async function jsonPayload(request: Request) {
   return request.json().catch(() => null) as Promise<UploadPayload | null>;
 }
 
-async function removeObject(path: string) {
-  await createAdminClient().storage.from(BUCKET).remove([path]);
-}
-
 export async function POST(request: Request) {
   if (!isAllowedOrigin(request)) return NextResponse.json({ error: "Invalid request origin" }, { status: 403 });
   await requireAdminSession();
@@ -95,17 +91,22 @@ export async function PATCH(request: Request) {
   const { data: stored, error: storedError } = await db.storage.from(BUCKET).info(payload.path);
   if (storedError || !stored) return NextResponse.json({ error: "တင်ထားတဲ့ Video ကို မတွေ့ပါ။ ပြန်ရွေးပေးပါ။" }, { status: 404 });
   if (!stored.size || stored.size > MAX_VIDEO_BYTES) {
-    await removeObject(payload.path);
     return NextResponse.json({ error: "Video file ကို 75MB အောက်ရွေးပေးပါ။" }, { status: 400 });
   }
 
   const actorId = await getAuditActorId();
-  const { data: currentLink } = await db.from("shared_exercise_videos")
-    .select("asset_id")
-    .eq("exercise_id", payload.exerciseId)
-    .eq("role", payload.role)
-    .maybeSingle();
-  const { data: asset, error: assetError } = await db.from("media_assets").insert({
+  // Object paths are unique. Retrying finalization must reuse the same asset.
+  const { data: existing, error: lookupError } = await db.from("media_assets")
+    .select("id").eq("bucket_id", BUCKET).eq("object_path", payload.path).maybeSingle();
+  if (lookupError) return NextResponse.json({ error: "Video status စစ်မရသေးပါ။ ပြန်စမ်းပါ။" }, { status: 503 });
+  if (existing) {
+    const { data: linked, error } = await db.from("shared_exercise_videos").select("asset_id")
+      .eq("exercise_id", payload.exerciseId).eq("role", payload.role).maybeSingle();
+    if (error) return NextResponse.json({ error: "Video status စစ်မရသေးပါ။" }, { status: 503 });
+    if (linked?.asset_id === existing.id) return NextResponse.json({ ok: true, assetId: existing.id });
+    if (linked) return NextResponse.json({ error: "Video အသစ်ပြောင်းထားပါတယ်။ Page ပြန်ဖွင့်ပြီး စစ်ပေးပါ။" }, { status: 409 });
+  }
+  const { data: asset, error: assetError } = existing ? { data: existing, error: null } : await db.from("media_assets").insert({
     bucket_id: BUCKET,
     object_path: payload.path,
     kind: "video",
@@ -114,7 +115,6 @@ export async function PATCH(request: Request) {
     uploaded_by: actorId,
   }).select("id").single();
   if (assetError || !asset) {
-    await removeObject(payload.path);
     return NextResponse.json({ error: "Video အချက်အလက်ကို မသိမ်းနိုင်သေးပါ။" }, { status: 500 });
   }
 
@@ -124,16 +124,11 @@ export async function PATCH(request: Request) {
     asset_id: asset.id,
   }, { onConflict: "exercise_id,role" });
   if (linkError) {
-    await db.from("media_assets").delete().eq("id", asset.id);
-    await removeObject(payload.path);
     return NextResponse.json({ error: "Video ကို Exercise နဲ့ မချိတ်နိုင်ပါ။" }, { status: 500 });
   }
 
-  if (currentLink?.asset_id && currentLink.asset_id !== asset.id) {
-    const { data: previousAsset } = await db.from("media_assets").select("object_path").eq("id", currentLink.asset_id).maybeSingle();
-    await db.from("media_assets").delete().eq("id", currentLink.asset_id);
-    if (previousAsset?.object_path) await removeObject(previousAsset.object_path);
-  }
+  // Assigned programs retain asset IDs. Never delete a replaced asset here.
+  // Unreferenced uploads can be collected separately after a retention period.
 
   try {
     await writeAudit(session.id, "exercise.video.upload", "storage_object", payload.path, {
@@ -158,6 +153,7 @@ export async function DELETE(request: Request) {
   if (!payload.path.startsWith(expectedPrefix(payload.exerciseId as string, payload.role as string)) || payload.path.includes("..")) {
     return NextResponse.json({ error: "Invalid upload cleanup" }, { status: 400 });
   }
-  await removeObject(payload.path);
-  return NextResponse.json({ ok: true });
+  // A lost PATCH response does not mean the commit failed. Cleanup cannot safely
+  // distinguish that case (or an in-flight commit); retain rather than destroy.
+  return NextResponse.json({ ok: true, retained: true });
 }

@@ -4,7 +4,7 @@ import { CoachingToolsNav } from "@/components/coaching/coaching-tools-nav";
 
 export const dynamic = "force-dynamic";
 
-export default async function CoachingMealsPage(){
-  const data=await getCoachingMealManagerData();
-  return <><CoachingToolsNav group="plans" active="/coaching/meals"/><MealManager clients={data.clients} items={data.items}/></>;
+export default async function CoachingMealsPage({searchParams}:{searchParams:Promise<{client?:string}>}){
+  const data=await getCoachingMealManagerData((await searchParams).client);
+  return <><CoachingToolsNav group="plans" active="/coaching/meals"/><MealManager key={data.selectedClientId} initialClientId={data.selectedClientId} clients={data.clients} items={data.items}/></>;
 }

@@ -1,6 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/admin-db";
-import { readAllPages } from "@/lib/read-all-pages";
+import { readAllPages, readAllPagesResult } from "@/lib/read-all-pages";
 import { type AdminProgramStructure } from "@/components/admin/types";
 function groupByUser<T extends { user_id: string }>(rows: T[]) {
   const groups = new Map<string, T[]>();
@@ -47,9 +47,9 @@ export async function getCentralOverview() {
 export async function getAdminCustomers() {
   const db = createAdminClient();
   const [profiles, programs, orders] = await Promise.all([
-    db.from("profiles").select("id,display_name,preferred_locale,created_at").order("created_at", { ascending: false }).limit(300),
-    db.from("programs").select("id,user_id,status,name_mm,name_en,assigned_at").order("assigned_at", { ascending: false }).limit(300),
-    db.from("payment_orders").select("id,user_id,status,reference_code,created_at").order("created_at", { ascending: false }).limit(300),
+    readAllPagesResult((from, to) => db.from("profiles").select("id,display_name,preferred_locale,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("programs").select("id,user_id,status,name_mm,name_en,assigned_at").order("assigned_at", { ascending: false }).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("payment_orders").select("id,user_id,status,reference_code,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
   ]);
   const firstError = [profiles.error, programs.error, orders.error].find(Boolean); if (firstError) throw firstError;
   const programByUser = latestByUser(programs.data ?? []);
@@ -64,18 +64,17 @@ export async function getAdminCustomers() {
 export async function getAdminPayments() {
   const db = createAdminClient();
   const [orders, profiles, versions, templates, proofs] = await Promise.all([
-    db.from("payment_orders").select("id,user_id,reference_code,status,amount_minor,currency,customer_note,submitted_at,approved_at,created_at").order("created_at", { ascending: false }).limit(500),
-    db.from("profiles").select("id,display_name").limit(500),
+    readAllPagesResult((from, to) => db.from("payment_orders").select("id,user_id,reference_code,status,amount_minor,currency,customer_note,submitted_at,approved_at,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("profiles").select("id,display_name").order("id").range(from, to)),
     db.from("template_versions").select("id,template_id,version_no,name_en,status").eq("status", "published").order("version_no", { ascending: false }),
     db.from("program_templates").select("id,name_en"),
-    db.from("payment_proofs").select("id,order_id,storage_path,mime_type,created_at").order("created_at", { ascending: false }).limit(500),
+    readAllPagesResult((from, to) => db.from("payment_proofs").select("id,order_id,storage_path,mime_type,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
   ]);
   const firstError = [orders.error, profiles.error, versions.error, templates.error, proofs.error].find(Boolean); if (firstError) throw firstError;
-  const signedEntries = await Promise.all((proofs.data ?? []).map(async (proof) => {
-    const { data } = await db.storage.from("payment-proofs").createSignedUrl(proof.storage_path, 900);
-    return [proof.order_id, data?.signedUrl ?? null] as const;
-  }));
-  const proofUrls = new Map(signedEntries);
+  const proofUrls = new Map<string, string>();
+  for (const proof of proofs.data ?? []) {
+    if (!proofUrls.has(proof.order_id)) proofUrls.set(proof.order_id, `/api/admin/payment-proof/${proof.id}`);
+  }
   const names = new Map((profiles.data ?? []).map((profile) => [profile.id, profile.display_name]));
   const templateNames = new Map((templates.data ?? []).map((template) => [template.id, template.name_en]));
   return {
@@ -161,7 +160,7 @@ export async function getAdminTemplateProgram(templateId: string): Promise<Admin
       .select("id,category_id,slug,name_mm,name_en,cue_mm,cue_en,equipment_mm,equipment_en,default_sets,default_reps_min,default_reps_max,default_rest_seconds,sort_order")
       .order("sort_order")
       .order("name_en"),
-    db.from("exercise_categories").select("id,name,sort_order").order("sort_order").order("name"),
+    readAllPagesResult((from, to) => db.from("exercise_categories").select("id,name,sort_order").order("sort_order").order("name").order("id").range(from, to)),
     db.from("template_days")
       .select("id,day_number,day_type,phase,title_mm,title_en")
       .eq("template_version_id", version.id)
@@ -285,12 +284,12 @@ export async function getCoachingPayments() {
 export async function getCoachingClients() {
   const db = createAdminClient();
   const [profiles, registrations, programs, templates, logs, checkins] = await Promise.all([
-    db.from("coaching_profiles").select("id,username,email,avatar_url,onboarding_complete,created_at").eq("role", "user").order("created_at", { ascending: false }),
-    db.from("coaching_registrations").select("id,user_id,name,email,program_name,payment_status,created_at").order("created_at", { ascending: false }),
-    db.from("coaching_programs").select("id,user_id,duration_weeks,start_date,program_type"),
-    db.from("coaching_custom_tracker_templates").select("id,user_id,name,updated_at").eq("active", true),
-    db.from("coaching_daily_trackers").select("id,user_id,date,body_weight,created_at").order("date", { ascending: false }).limit(3000),
-    db.from("coaching_weekly_checkins").select("id,user_id,week_number,avg_weight,admin_feedback,created_at").order("created_at", { ascending: false }).limit(1000),
+    readAllPagesResult((from, to) => db.from("coaching_profiles").select("id,username,email,avatar_url,onboarding_complete,created_at").eq("role", "user").order("created_at", { ascending: false }).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_registrations").select("id,user_id,name,email,program_name,payment_status,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_programs").select("id,user_id,duration_weeks,start_date,program_type").order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_custom_tracker_templates").select("id,user_id,name,updated_at").eq("active", true).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_daily_trackers").select("id,user_id,date,body_weight,created_at").order("date", { ascending: false }).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_weekly_checkins").select("id,user_id,week_number,avg_weight,admin_feedback,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
   ]);
   const firstError = [profiles.error, registrations.error, programs.error, templates.error, logs.error, checkins.error].find(Boolean);
   if (firstError) throw firstError;
@@ -411,9 +410,9 @@ export async function getCoachingClientProgress(clientId: string) {
 export async function getCoachingTemplateData() {
   const db = createAdminClient();
   const [profiles, registrations, templates] = await Promise.all([
-    db.from("coaching_profiles").select("id,username,email,avatar_url").eq("role", "user").order("username"),
-    db.from("coaching_registrations").select("user_id,name,email,payment_status").in("payment_status", ["approved", "ready"]),
-    db.from("coaching_custom_tracker_templates").select("user_id,name,sections,updated_at").eq("active", true),
+    readAllPagesResult((from, to) => db.from("coaching_profiles").select("id,username,email,avatar_url").eq("role", "user").order("username").order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_registrations").select("user_id,name,email,payment_status").in("payment_status", ["approved", "ready"]).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_custom_tracker_templates").select("user_id,name,sections,updated_at").eq("active", true).order("id").range(from, to)),
   ]);
   const firstError = [profiles.error, registrations.error, templates.error].find(Boolean);
   if (firstError) throw firstError;
@@ -425,9 +424,9 @@ export async function getCoachingTemplateData() {
 async function getEditableCoachingClients() {
   const db = createAdminClient();
   const [profiles, registrations, programs] = await Promise.all([
-    db.from("coaching_profiles").select("id,username,email,avatar_url").eq("role", "user").order("username"),
-    db.from("coaching_registrations").select("user_id,name,payment_status").in("payment_status", ["approved", "ready"]),
-    db.from("coaching_programs").select("user_id,program_type,start_date,duration_weeks"),
+    readAllPagesResult((from, to) => db.from("coaching_profiles").select("id,username,email,avatar_url").eq("role", "user").order("username").order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_registrations").select("user_id,name,payment_status").in("payment_status", ["approved", "ready"]).order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("coaching_programs").select("user_id,program_type,start_date,duration_weeks").order("id").range(from, to)),
   ]);
   const firstError = [profiles.error, registrations.error, programs.error].find(Boolean);
   if (firstError) throw firstError;
@@ -440,19 +439,21 @@ async function getEditableCoachingClients() {
   }));
 }
 
-export async function getCoachingWorkoutManagerData() {
+export async function getCoachingWorkoutManagerData(requestedClientId?: string) {
   const db = createAdminClient();
-  const [clients, workouts, library, categories] = await Promise.all([
-    getEditableCoachingClients(),
-    db.from("coaching_workouts")
+  const clients = await getEditableCoachingClients();
+  const selectedClientId = clients.find((client) => client.id === requestedClientId)?.id ?? clients[0]?.id ?? "";
+  const [workouts, library, categories] = await Promise.all([
+    readAllPagesResult((from, to) => db.from("coaching_workouts")
       .select("id,user_id,date,split_name,completed,user_notes,user_feelings,created_at")
+      .eq("user_id", selectedClientId || "00000000-0000-0000-0000-000000000000")
       .order("date", { ascending: false })
-      .limit(1000),
-    db.from("shared_exercises")
+      .order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("shared_exercises")
       .select("id,category_id,slug,name_mm,name_en,muscle_group,default_sets,default_reps_min,default_reps_max,default_rest_seconds,sort_order")
       .order("sort_order")
-      .order("name_en"),
-    db.from("exercise_categories").select("id,name,sort_order").order("sort_order"),
+      .order("name_en").order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("exercise_categories").select("id,name,sort_order").order("sort_order").order("id").range(from, to)),
   ]);
   const firstError = [workouts.error, library.error, categories.error].find(Boolean);
   if (firstError) throw firstError;
@@ -471,6 +472,7 @@ export async function getCoachingWorkoutManagerData() {
     exerciseByWorkout.set(exercise.workout_id, rows);
   }
   return {
+    selectedClientId,
     clients,
     workouts: (workouts.data ?? []).map((workout) => ({ ...workout, exercises: exerciseByWorkout.get(workout.id) ?? [] })),
     library: (library.data ?? []).map((exercise) => ({
@@ -484,8 +486,8 @@ export async function getSharedExerciseLibraryData() {
   const db = createAdminClient();
   const [categories, exercises, videos] = await Promise.all([
     db.from("exercise_categories").select("id,name,sort_order").order("sort_order").order("name"),
-    db.from("shared_exercises").select("id,category_id,slug,name_mm,name_en,cue_mm,cue_en,equipment_mm,equipment_en,muscle_group,default_sets,default_reps_min,default_reps_max,default_rest_seconds,unilateral,sort_order").order("sort_order").order("name_en"),
-    db.from("shared_exercise_videos").select("id,exercise_id,role,asset_id").order("role"),
+    readAllPagesResult((from, to) => db.from("shared_exercises").select("id,category_id,slug,name_mm,name_en,cue_mm,cue_en,equipment_mm,equipment_en,muscle_group,default_sets,default_reps_min,default_reps_max,default_rest_seconds,unilateral,sort_order").order("sort_order").order("name_en").order("id").range(from, to)),
+    readAllPagesResult((from, to) => db.from("shared_exercise_videos").select("id,exercise_id,role,asset_id").order("role").order("id").range(from, to)),
   ]);
   const firstError = [categories.error, exercises.error, videos.error].find(Boolean);
   if (firstError) throw firstError;
@@ -501,18 +503,20 @@ export async function getSharedExerciseLibraryData() {
   };
 }
 
-export async function getCoachingMealManagerData() {
+export async function getCoachingMealManagerData(requestedClientId?: string) {
   const db = createAdminClient();
-  const [clients, items] = await Promise.all([
-    getEditableCoachingClients(),
-    db.from("coaching_nutrition_items")
+  const clients = await getEditableCoachingClients();
+  const selectedClientId = clients.find((client) => client.id === requestedClientId)?.id ?? clients[0]?.id ?? "";
+  const [items] = await Promise.all([
+    readAllPagesResult((from, to) => db.from("coaching_nutrition_items")
       .select("id,user_id,program_type,meal_type,plan_date,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
       .eq("program_type", "personal_coaching")
+      .or(`user_id.eq.${selectedClientId || "00000000-0000-0000-0000-000000000000"},user_id.is.null`)
       .order("sort_order")
-      .order("id"),
+      .order("id").range(from, to)),
   ]);
   if (items.error) throw items.error;
-  return { clients, items: items.data ?? [] };
+  return { clients, selectedClientId, items: items.data ?? [] };
 }
 
 export async function getCoachingFeedbackManagerData() {

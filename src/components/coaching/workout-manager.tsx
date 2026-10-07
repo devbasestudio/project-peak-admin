@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CalendarCheck, Dumbbell, Plus, Save, Trash2 } from "lucide-react";
 import { assignCoachingWorkoutToDates, saveCoachingWorkout } from "@/app/coaching-actions";
@@ -15,15 +15,21 @@ type LibraryExercise={id:string;category_name:string;name_en:string;name_mm:stri
 type EditExercise={id?:number;libraryExerciseId:string;exerciseName:string;targetSets:number;targetReps:string;restSeconds:number};
 const blankExercise=():EditExercise=>({libraryExerciseId:"",exerciseName:"",targetSets:3,targetReps:"8-12",restSeconds:90});
 
-export function WorkoutManager({clients,workouts,library,today}:{clients:Client[];workouts:Workout[];library:LibraryExercise[];today:string}){
+export function WorkoutManager({clients,workouts,library,today,initialClientId}:{clients:Client[];workouts:Workout[];library:LibraryExercise[];today:string;initialClientId:string}){
   const router=useRouter();
-  const [clientId,setClientId]=useState(clients[0]?.id??"");
+  const [clientId,setClientId]=useState(initialClientId);
   const [workoutId,setWorkoutId]=useState<number>();
   const [date,setDate]=useState(today);
   const [targetDates,setTargetDates]=useState<string[]>([]);
   const [splitName,setSplitName]=useState("Full Body");
   const [exercises,setExercises]=useState<EditExercise[]>([blankExercise()]);
   const [message,setMessage]=useState("");
+  const retryRequest = useRef({ fingerprint: "", id: "" });
+  function requestId(payload: unknown) {
+    const fingerprint = JSON.stringify(payload);
+    if (retryRequest.current.fingerprint !== fingerprint) retryRequest.current = { fingerprint, id: crypto.randomUUID() };
+    return retryRequest.current.id;
+  }
   const [ok,setOk]=useState(false);
   const [pending,startTransition]=useTransition();
   const visible=useMemo(()=>workouts.filter(row=>row.user_id===clientId),[clientId,workouts]);
@@ -45,7 +51,8 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
   function save(){
     setMessage("");
     startTransition(async()=>{
-      const result=await saveCoachingWorkout({id:workoutId,userId:clientId,date,targetDates:workoutId?[]:targetDates,splitName,exercises});
+      const payload={id:workoutId,userId:clientId,date,targetDates:workoutId?[]:targetDates,splitName,exercises};
+      const result=await saveCoachingWorkout({...payload,requestId:requestId(payload)});
       setOk(result.ok);setMessage(result.message);
       if(result.ok&&result.workoutId){setWorkoutId(result.workoutId);setTargetDates([]);router.refresh();}
     });
@@ -54,7 +61,8 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
     if(!workoutId)return;
     setMessage("");
     startTransition(async()=>{
-      const result=await assignCoachingWorkoutToDates({workoutId,targetDates});
+      const payload={workoutId,targetDates};
+      const result=await assignCoachingWorkoutToDates({...payload,requestId:requestId(payload)});
       setOk(result.ok);setMessage(result.message);
       if(result.ok){setTargetDates([]);router.refresh();}
     });
@@ -66,7 +74,7 @@ export function WorkoutManager({clients,workouts,library,today}:{clients:Client[
     {clients.length===0?<div className={styles.empty}>Payment approve လုပ်ထားတဲ့ 1:1 client မရှိသေးပါ။</div>:<div className={styles.layout}>
       <aside className={styles.panel}>
         <div className={styles.panelHead}><div><p className={styles.kicker}>CLIENT + HISTORY</p><h2>ဘယ်သူ့ Plan လဲ?</h2></div><button className={styles.secondary} onClick={fresh}>အသစ်</button></div>
-        <div className={styles.panelBody}><label className={styles.field}><span>Client</span><select value={clientId} onChange={event=>{setClientId(event.target.value);fresh();}}>{clients.map(client=><option key={client.id} value={client.id}>{client.registration?.name||client.username||client.email} · {client.email}</option>)}</select></label></div>
+        <div className={styles.panelBody}><label className={styles.field}><span>Client</span><select disabled={pending} value={clientId} onChange={event=>{const next=event.target.value;setClientId(next);fresh();startTransition(()=>router.replace(`/coaching/workouts?client=${encodeURIComponent(next)}`));}}>{clients.map(client=><option key={client.id} value={client.id}>{client.registration?.name||client.username||client.email} · {client.email}</option>)}</select></label></div>
         <div className={styles.sessionList}>{visible.length?visible.map(row=><button className={styles.session} data-active={row.id===workoutId} key={row.id} onClick={()=>selectWorkout(row)}><time>{row.date}</time><span><strong>{row.split_name}</strong><small>{row.exercises.length} exercises · {row.completed?"ပြီး":"လုပ်ရန်"}</small></span><Dumbbell size={17}/></button>):<div className={styles.empty}>ဒီ Client အတွက် session မရှိသေးပါ။ “အသစ်” နှိပ်ပြီး စပါ။</div>}</div>
       </aside>
       <section className={styles.panel}>
