@@ -1,5 +1,6 @@
 import "server-only";
 import { createAdminClient } from "@/lib/admin-db";
+import { readAllPages } from "@/lib/read-all-pages";
 import { type AdminProgramStructure } from "@/components/admin/types";
 function groupByUser<T extends { user_id: string }>(rows: T[]) {
   const groups = new Map<string, T[]>();
@@ -334,10 +335,11 @@ export async function getCoachingClientProgress(clientId: string) {
   if (!profile.data) return null;
 
   const workoutIds = (workouts.data ?? []).map((workout) => workout.id);
-  const { data: exercises, error: exerciseError } = workoutIds.length
-    ? await db.from("coaching_workout_exercises").select("id,workout_id,exercise_name,target_sets,target_reps,actual_weight,actual_reps").in("workout_id", workoutIds)
-    : { data: [], error: null };
-  if (exerciseError) throw exerciseError;
+  const exercises = workoutIds.length
+    ? await readAllPages((from, to) => db.from("coaching_workout_exercises")
+      .select("id,workout_id,exercise_name,target_sets,target_reps,actual_weight,actual_reps")
+      .in("workout_id", workoutIds).order("id").range(from, to))
+    : [];
 
   const trackerPhotos = (trackers.data ?? []).flatMap((tracker) => {
     const values = tracker.tracker_values && typeof tracker.tracker_values === "object" && !Array.isArray(tracker.tracker_values)
@@ -456,14 +458,14 @@ export async function getCoachingWorkoutManagerData() {
   if (firstError) throw firstError;
   const workoutIds = (workouts.data ?? []).map((row) => row.id);
   const exercises = workoutIds.length
-    ? await db.from("coaching_workout_exercises")
+    ? await readAllPages((from, to) => db.from("coaching_workout_exercises")
       .select("id,workout_id,shared_exercise_id,exercise_name,target_sets,target_reps,rest_seconds,actual_weight,actual_reps")
       .in("workout_id", workoutIds)
       .order("id")
-    : { data: [], error: null };
-  if (exercises.error) throw exercises.error;
-  const exerciseByWorkout = new Map<number, typeof exercises.data>();
-  for (const exercise of exercises.data ?? []) {
+      .range(from, to))
+    : [];
+  const exerciseByWorkout = new Map<number, typeof exercises>();
+  for (const exercise of exercises) {
     const rows = exerciseByWorkout.get(exercise.workout_id) ?? [];
     rows.push(exercise);
     exerciseByWorkout.set(exercise.workout_id, rows);
