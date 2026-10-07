@@ -28,31 +28,15 @@ export async function saveCoachingTemplate(input: unknown) {
   if (!parsed.success) return { ok: false, message: parsed.error.issues[0]?.message || "Template data မမှန်ပါ" };
   const viewer = await requireAdmin();
   const db = createAdminClient();
-  const now = new Date().toISOString();
-  const { error } = await db.from("coaching_custom_tracker_templates").upsert({ user_id: parsed.data.userId, name: parsed.data.name, sections: parsed.data.sections, active: true, updated_at: now }, { onConflict: "user_id" });
+  const { error } = await db.rpc("admin_save_coaching_template_atomic", {
+    p_user_id: parsed.data.userId, p_name: parsed.data.name,
+    p_sections: parsed.data.sections, p_mark_ready: parsed.data.markReady,
+  });
   if (error) {
     console.error("Coaching template save failed", error.code);
-    return { ok: false, message: "Template save မအောင်မြင်ပါ။ ပြန်စမ်းကြည့်ပါ။" };
+    return { ok: false, message: error.code === "55000" ? "Payment approve အရင်လုပ်ပေးပါ" : "Template save မအောင်မြင်ပါ။ ပြန်စမ်းကြည့်ပါ။" };
   }
-  if (parsed.data.markReady) {
-    const { data: registration, error: registrationError } = await db.from("coaching_registrations").select("id,payment_status").eq("user_id", parsed.data.userId).maybeSingle();
-    if (registrationError) {
-      console.error("Coaching registration lookup failed", registrationError.code);
-      return { ok: false, message: "Client access စစ်မရပါ။ ပြန်စမ်းကြည့်ပါ။" };
-    }
-    if (!registration || !["approved", "ready"].includes(registration.payment_status)) return { ok: false, message: "Payment approve အရင်လုပ်ပေးပါ" };
-    const { error: profileError } = await db.from("coaching_profiles").update({ onboarding_complete: true, updated_at: now }).eq("id", parsed.data.userId);
-    if (profileError) {
-      console.error("Coaching profile activation failed", profileError.code);
-      return { ok: false, message: "Client dashboard ဖွင့်မရပါ။ ပြန်စမ်းကြည့်ပါ။" };
-    }
-    const { error: readyError } = await db.from("coaching_registrations").update({ payment_status: "ready", status: "ready", ready_at: now, updated_at: now }).eq("id", registration.id);
-    if (readyError) {
-      console.error("Coaching registration activation failed", readyError.code);
-      return { ok: false, message: "Client access ready မလုပ်နိုင်ပါ။ ပြန်စမ်းကြည့်ပါ။" };
-    }
-  }
-  await writeAudit(viewer.session.id, parsed.data.markReady ? "coaching.template.ready" : "coaching.template.save", "coaching_profile", parsed.data.userId);
+  await writeAudit(viewer.session.id, parsed.data.markReady ? "coaching.template.ready" : "coaching.template.save", "coaching_profile", parsed.data.userId).catch(() => console.error("Template audit write failed"));
   revalidatePath("/coaching/templates"); revalidatePath("/coaching/clients"); revalidatePath("/coaching/overview");
   return { ok: true, message: parsed.data.markReady ? "Template save ပြီး client စသုံးနိုင်ပါပြီ" : "အပြောင်းအလဲ သိမ်းပြီးပါပြီ" };
 }
@@ -177,6 +161,7 @@ export async function duplicateCoachingWorkout(input: unknown) {
 
 export async function saveCoachingMeal(input: unknown) {
   const parsed = z.object({
+    requestId: z.string().uuid().optional(),
     id: z.coerce.number().int().positive().optional(),
     userId: z.string().uuid(),
     programType: z.literal("personal_coaching"),
@@ -195,26 +180,18 @@ export async function saveCoachingMeal(input: unknown) {
   if (!parsed.success) return { ok: false, message: "Meal အချက်အလက်ကို ပြည့်စုံအောင်ဖြည့်ပေးပါ။" };
   const viewer = await requireAdmin();
   const db = createAdminClient();
-  const row = {
-    user_id: parsed.data.userId,
-    program_type: parsed.data.programType, meal_type: parsed.data.mealType,
-    plan_date: parsed.data.planDate,
-    food_name: parsed.data.foodName, food_name_mm: parsed.data.foodNameMm || null,
-    portion: parsed.data.portion || null, calories: parsed.data.calories,
-    protein_g: parsed.data.protein, carbs_g: parsed.data.carbs, fat_g: parsed.data.fat,
-    benefits_text: parsed.data.benefits || null, sort_order: parsed.data.sortOrder,
-  };
-  const result = parsed.data.id
-    ? await db.from("coaching_nutrition_items").update(row).eq("id", parsed.data.id).eq("user_id", parsed.data.userId).select("id").single()
-    : await db.from("coaching_nutrition_items").insert(row).select("id").single();
+  const result = await db.rpc("admin_mutate_coaching_meals", { p_input: {
+    ...parsed.data, operation: "save", requestId: parsed.data.requestId ?? crypto.randomUUID(),
+  } });
   if (result.error || !result.data) return { ok: false, message: "Meal ကို သိမ်းမရပါ။ ပြန်စမ်းပေးပါ။" };
-  await writeAudit(viewer.session.id, "coaching.meal.save", "coaching_nutrition_item", String(result.data.id));
+  await writeAudit(viewer.session.id, "coaching.meal.save", "coaching_nutrition_item", String(result.data.mealId)).catch(() => console.error("Meal audit write failed"));
   revalidatePath("/coaching/meals");
-  return { ok: true, message: "Meal plan သိမ်းပြီးပါပြီ။ Client app မှာပြန်ပေါ်ပါမယ်။", mealId: result.data.id };
+  return { ok: true, message: "Meal plan သိမ်းပြီးပါပြီ။ Client app မှာပြန်ပေါ်ပါမယ်။", mealId: Number(result.data.mealId) };
 }
 
 export async function duplicateCoachingMealDay(input: unknown) {
   const parsed = z.object({
+    requestId: z.string().uuid().optional(),
     userId: z.string().uuid(),
     sourceDate: z.iso.date(),
     targetDate: z.iso.date().optional(),
@@ -232,51 +209,32 @@ export async function duplicateCoachingMealDay(input: unknown) {
 
   const viewer = await requireAdmin();
   const db = createAdminClient();
-  const { data: source, error: sourceError } = await db.from("coaching_nutrition_items")
-    .select("program_type,meal_type,plan_date,food_name,food_name_mm,portion,calories,protein_g,carbs_g,fat_g,benefits_text,sort_order")
-    .eq("user_id", parsed.data.userId)
-    .eq("program_type", "personal_coaching")
-    .or(`plan_date.eq.${parsed.data.sourceDate},plan_date.is.null`)
-    .order("sort_order")
-    .order("id");
-  if (sourceError) return { ok: false, message: "လက်ရှိရက် Meal Plan ကို ဖတ်မရပါ။" };
-  if (!source?.length) return { ok: false, message: "ဒီရက်မှာ ပွားစရာ Meal မရှိသေးပါ။ အရင်ဆုံး Meal တစ်ခုသိမ်းပေးပါ။" };
-  const activeSource = (["breakfast", "lunch", "snack", "dinner", "evening"] as const).flatMap((mealType) => {
-    const dated = source.filter((item) => item.meal_type === mealType && item.plan_date === parsed.data.sourceDate);
-    return dated.length ? dated : source.filter((item) => item.meal_type === mealType && !item.plan_date);
-  });
-
   const datesToCreate = initializeSourceDate ? [parsed.data.sourceDate] : targetDates;
-  const { data: existingTargets, error: targetError } = await db.from("coaching_nutrition_items")
-    .select("plan_date")
-    .eq("user_id", parsed.data.userId)
-    .eq("program_type", "personal_coaching")
-    .in("plan_date", datesToCreate);
-  if (targetError) return { ok: false, message: "ထည့်မယ့်ရက်ကို စစ်မရပါ။" };
-  const conflictDates = [...new Set((existingTargets ?? []).map((row) => row.plan_date).filter(Boolean))];
-  if (conflictDates.length) return { ok: false, message: `${conflictDates.join(", ")} ရက်မှာ Meal Plan ရှိပြီးသားပါ။ ဘာမှ overwrite မလုပ်ထားပါ။` };
-
-  const rows = datesToCreate.flatMap((targetDate) => activeSource.map((item) => ({ ...item, user_id: parsed.data.userId, plan_date: targetDate })));
-  const { error } = await db.from("coaching_nutrition_items").insert(rows);
-  if (error) return { ok: false, message: "Meal Plan ကို ရွေးထားတဲ့ရက်တွေဆီ မထည့်နိုင်သေးပါ။" };
+  const { data, error } = await db.rpc("admin_mutate_coaching_meals", { p_input: {
+    requestId: parsed.data.requestId ?? crypto.randomUUID(), operation: "copy",
+    userId: parsed.data.userId, sourceDate: parsed.data.sourceDate, targetDates: datesToCreate,
+  } });
+  if (error) return { ok: false, message: error.code === "23505"
+    ? "ရွေးထားတဲ့ရက်မှာ Meal Plan ရှိပြီးသားပါ။ ဘာမှ overwrite မလုပ်ထားပါ။"
+    : "Meal Plan မထည့်နိုင်ပါ။ Source နဲ့ ရက်တွေကို ပြန်စစ်ပေးပါ။ ရက်အားလုံး မပြောင်းထားပါ။" };
 
   await writeAudit(viewer.session.id, "coaching.meal_day.duplicate", "coaching_profile", parsed.data.userId, {
     sourceDate: parsed.data.sourceDate,
     targetDates: datesToCreate,
-    itemCount: rows.length,
-  });
+    itemCount: data.itemCount,
+  }).catch(() => console.error("Meal copy audit write failed"));
   revalidatePath("/coaching/meals");
   return { ok: true, message: `${datesToCreate.length} ရက်အတွက် Meal Plan တစ်ခါတည်းထည့်ပြီးပါပြီ။` };
 }
 
 export async function deleteCoachingMeal(input: unknown) {
-  const parsed = z.object({ id: z.coerce.number().int().positive(), userId: z.string().uuid() }).safeParse(input);
+  const parsed = z.object({ id: z.coerce.number().int().positive(), userId: z.string().uuid(), requestId: z.string().uuid().optional() }).safeParse(input);
   if (!parsed.success) return { ok: false, message: "ဖျက်မယ့် meal မမှန်ပါ။" };
   const viewer = await requireAdmin();
   const db = createAdminClient();
-  const { error } = await db.from("coaching_nutrition_items").delete().eq("id", parsed.data.id).eq("user_id", parsed.data.userId);
+  const { error } = await db.rpc("admin_mutate_coaching_meals", { p_input: { ...parsed.data, operation: "delete", requestId: parsed.data.requestId ?? crypto.randomUUID() } });
   if (error) return { ok: false, message: "Meal ကို ဖျက်မရပါ။ အသုံးပြုပြီးသား log ရှိနိုင်ပါတယ်။" };
-  await writeAudit(viewer.session.id, "coaching.meal.delete", "coaching_nutrition_item", String(parsed.data.id));
+  await writeAudit(viewer.session.id, "coaching.meal.delete", "coaching_nutrition_item", String(parsed.data.id)).catch(() => console.error("Meal delete audit write failed"));
   revalidatePath("/coaching/meals");
   return { ok: true, message: "Meal ကို ဖယ်ပြီးပါပြီ။" };
 }

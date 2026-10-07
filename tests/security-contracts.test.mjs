@@ -85,7 +85,8 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   const actions = await read("src/app/coaching-actions.ts");
   for (const action of ["saveCoachingWorkout", "assignCoachingWorkoutToDates", "duplicateCoachingWorkout", "saveCoachingMeal", "duplicateCoachingMealDay", "deleteCoachingMeal", "saveCoachingFeedbackTemplate"]) assert.match(actions, new RegExp(`export async function ${action}`));
   assert.doesNotMatch(actions, /saveCoachingExerciseLibraryItem/);
-  for (const table of ["coaching_workouts", "coaching_workout_exercises", "coaching_nutrition_items", "coaching_feedback_form_templates"]) assert.match(actions, new RegExp(`from\\(\\\"${table}\\\"\\)`));
+  for (const table of ["coaching_workouts", "coaching_workout_exercises", "coaching_feedback_form_templates"]) assert.match(actions, new RegExp(`from\\(\\\"${table}\\\"\\)`));
+  assert.match(actions, /rpc\("admin_mutate_coaching_meals"/);
   assert.match(actions, /await requireAdmin\(\)/);
   const workout = await read("src/components/coaching/workout-manager.tsx");
   assert.match(workout, /type=\"number\"/);
@@ -146,12 +147,13 @@ test("1:1 admin exposes real workout, exercise video, meal, and feedback managem
   assert.match(multiDatePicker, /Array\.from\(\{ length: 42 \}/);
   assert.match(multiDatePicker, /selectionLimitReached/);
   assert.match(actions, /coaching\.workout\.multi_date_assign/);
-  assert.match(actions, /\.in\("plan_date", datesToCreate\)/);
-  assert.match(actions, /plan_date: parsed\.data\.planDate/);
+  const atomicMeals = await read("supabase/migrations/20261007100000_coaching_plan_safety.sql");
+  assert.match(atomicMeals, /plan_date=any\(dates\)/);
+  assert.match(atomicMeals, /plan_date=\(p_input->>'planDate'\)::date/);
   const datedMealsMigration = await read("supabase/migrations/20260917090000_add_dated_coaching_meal_plans.sql");
   assert.match(datedMealsMigration, /add column if not exists plan_date date/);
   assert.match(actions, /userId: z\.string\(\)\.uuid\(\)/);
-  assert.match(actions, /user_id: parsed\.data\.userId/);
+  assert.match(actions, /userId: parsed\.data\.userId/);
 });
 
 test("home workout and 1:1 selectors share one categorized exercise source", async () => {

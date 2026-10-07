@@ -59,3 +59,29 @@ create table if not exists public.coaching_journaling (
   diet_status text, satisfied_with text, difficult_with text,
   created_at timestamptz not null default now(), unique(user_id,date)
 );
+
+create table if not exists public.coaching_custom_tracker_templates (
+  id bigint generated always as identity primary key,
+  user_id uuid not null unique references coaching_profiles(id), name text not null,
+  sections jsonb not null default '[]', active boolean not null default true,
+  created_at timestamptz default now(), updated_at timestamptz default now()
+);
+
+create table if not exists public.coaching_nutrition_items (
+  id bigint generated always as identity primary key,
+  user_id uuid references coaching_profiles(id), program_type text not null, meal_type text not null,
+  plan_date date, food_name text not null, food_name_mm text, portion text,
+  calories int default 0, protein_g numeric(6,1) default 0, carbs_g numeric(6,1) default 0,
+  fat_g numeric(6,1) default 0, benefits_text text, sort_order int default 0
+);
+
+create table if not exists public.coaching_nutrition_logs (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references coaching_profiles(id), date date not null,
+  nutrition_item_id bigint references coaching_nutrition_items(id) on delete cascade
+);
+
+create table if not exists public.coaching_weekly_checkins (
+  id bigint generated always as identity primary key,
+  user_id uuid not null references coaching_profiles(id), week_number integer not null
+);

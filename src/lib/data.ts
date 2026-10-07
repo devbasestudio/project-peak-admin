@@ -2,16 +2,6 @@ import "server-only";
 import { createAdminClient } from "@/lib/admin-db";
 import { readAllPages, readAllPagesResult } from "@/lib/read-all-pages";
 import { type AdminProgramStructure } from "@/components/admin/types";
-function groupByUser<T extends { user_id: string }>(rows: T[]) {
-  const groups = new Map<string, T[]>();
-  for (const row of rows) {
-    const group = groups.get(row.user_id);
-    if (group) group.push(row);
-    else groups.set(row.user_id, [row]);
-  }
-  return groups;
-}
-
 function latestByUser<T extends { user_id: string }>(rows: T[]) {
   const latest = new Map<string, T>();
   for (const row of rows) {
@@ -283,28 +273,34 @@ export async function getCoachingPayments() {
 
 export async function getCoachingClients() {
   const db = createAdminClient();
-  const [profiles, registrations, programs, templates, logs, checkins] = await Promise.all([
+  const [profiles, registrations, programs, templates] = await Promise.all([
     readAllPagesResult((from, to) => db.from("coaching_profiles").select("id,username,email,avatar_url,onboarding_complete,created_at").eq("role", "user").order("created_at", { ascending: false }).order("id").range(from, to)),
     readAllPagesResult((from, to) => db.from("coaching_registrations").select("id,user_id,name,email,program_name,payment_status,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
     readAllPagesResult((from, to) => db.from("coaching_programs").select("id,user_id,duration_weeks,start_date,program_type").order("id").range(from, to)),
     readAllPagesResult((from, to) => db.from("coaching_custom_tracker_templates").select("id,user_id,name,updated_at").eq("active", true).order("id").range(from, to)),
-    readAllPagesResult((from, to) => db.from("coaching_daily_trackers").select("id,user_id,date,body_weight,created_at").order("date", { ascending: false }).order("id").range(from, to)),
-    readAllPagesResult((from, to) => db.from("coaching_weekly_checkins").select("id,user_id,week_number,avg_weight,admin_feedback,created_at").order("created_at", { ascending: false }).order("id").range(from, to)),
   ]);
-  const firstError = [profiles.error, registrations.error, programs.error, templates.error, logs.error, checkins.error].find(Boolean);
+  const firstError = [profiles.error, registrations.error, programs.error, templates.error].find(Boolean);
   if (firstError) throw firstError;
   const registrationByUser = new Map((registrations.data ?? []).filter((row) => row.user_id).map((row) => [row.user_id, row]));
   const programByUser = new Map((programs.data ?? []).map((row) => [row.user_id, row]));
   const templateByUser = new Map((templates.data ?? []).map((row) => [row.user_id, row]));
-  const logsByUser = groupByUser(logs.data ?? []);
-  const checkinsByUser = groupByUser(checkins.data ?? []);
+  type Summary = { user_id: string; log_count: number; checkin_count: number; latest_date: string | null; latest_weight: number | null };
+  const summaries = new Map<string, Summary>();
+  const ids = (profiles.data ?? []).map((profile) => profile.id);
+  for (let start = 0; start < ids.length; start += 100) {
+    const { data, error } = await db.rpc("admin_coaching_client_summary", { p_user_ids: ids.slice(start, start + 100) });
+    if (error) throw error;
+    for (const row of (data ?? []) as Summary[]) summaries.set(row.user_id, row);
+  }
   return (profiles.data ?? []).map((profile) => ({
     ...profile,
     registration: registrationByUser.get(profile.id) ?? null,
     program: programByUser.get(profile.id) ?? null,
     template: templateByUser.get(profile.id) ?? null,
-    logs: logsByUser.get(profile.id) ?? [],
-    checkins: checkinsByUser.get(profile.id) ?? [],
+    logCount: Number(summaries.get(profile.id)?.log_count ?? 0),
+    checkinCount: Number(summaries.get(profile.id)?.checkin_count ?? 0),
+    latestDate: summaries.get(profile.id)?.latest_date ?? null,
+    latestWeight: summaries.get(profile.id)?.latest_weight ?? null,
   }));
 }
 

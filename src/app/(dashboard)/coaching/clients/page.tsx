@@ -27,9 +27,9 @@ export default async function CoachingClientsPage() {
                   <td data-label="Client"><strong>{client.username}</strong><small className="mono">{client.email || "—"}</small></td>
                   <td data-label="Program">{client.program ? <><strong>{client.program.duration_weeks} weeks</strong><small>Started {new Date(client.program.start_date).toLocaleDateString("en-GB")}</small></> : <span className={styles.muted}>မသတ်မှတ်ရသေး</span>}</td>
                   <td data-label="Template">{client.template ? <><span className={styles.status} data-status="approved">READY</span><small>{client.template.name}</small></> : <span className={styles.status} data-status="pending">BUILD</span>}</td>
-                  <td data-label="Daily Logs"><strong>{client.logs.length}</strong><small>entries</small></td>
-                  <td data-label="Check-ins"><strong>{client.checkins.length}</strong><small>entries</small></td>
-                  <td data-label="Latest">{client.logs[0] ? <><strong>{client.logs[0].body_weight ? `${client.logs[0].body_weight} kg` : "Logged"}</strong><small>{new Date(client.logs[0].date).toLocaleDateString("en-GB")}</small></> : <span className={styles.muted}>မဖြည့်ရသေး</span>}</td>
+                  <td data-label="Daily Logs"><strong>{client.logCount}</strong><small>entries</small></td>
+                  <td data-label="Check-ins"><strong>{client.checkinCount}</strong><small>entries</small></td>
+                  <td data-label="Latest">{client.latestDate ? <><strong>{client.latestWeight ? `${client.latestWeight} kg` : "Logged"}</strong><small>{new Date(client.latestDate).toLocaleDateString("en-GB")}</small></> : <span className={styles.muted}>မဖြည့်ရသေး</span>}</td>
                   <td data-label="Detail"><Link className={styles.tableAction} href={`/coaching/clients/${client.id}`}><Eye size={14}/>အသေးစိတ်</Link></td>
                 </tr>
               ))}</tbody>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useMemo, useRef, useState, useTransition } from "react";
 import { CalendarDays, Check, Copy, Pencil, Plus, Save, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { deleteCoachingMeal, duplicateCoachingMealDay, saveCoachingMeal } from "@/app/coaching-actions";
@@ -92,6 +92,19 @@ export function MealManager({ clients, items, initialClientId }: { clients: Clie
   const [message, setMessage] = useState("");
   const [ok, setOk] = useState(false);
   const [pending, startTransition] = useTransition();
+  const requests = useRef(new Map<string, { fingerprint: string; id: string }>());
+  function requestId(operation: string, payload: unknown) {
+    const fingerprint = JSON.stringify(payload);
+    const prior = requests.current.get(operation);
+    if (prior?.fingerprint === fingerprint) return prior.id;
+    const id = crypto.randomUUID();
+    requests.current.set(operation, { fingerprint, id });
+    return id;
+  }
+  async function invoke<T extends { ok: boolean; message: string }>(action: () => Promise<T>): Promise<T | { ok: false; message: string; mealId?: undefined }> {
+    try { return await action(); }
+    catch { return { ok: false, message: "Connection ပြတ်သွားပါတယ်။ ထပ်မပွားဘဲ ဒီအတိုင်း ပြန်သိမ်းနိုင်ပါတယ်။" }; }
+  }
   const datedClientItems = useMemo(() => items.filter((item) => item.user_id === clientId && item.plan_date === planDate && item.meal_type === mealType), [clientId, items, mealType, planDate]);
   const legacyClientItems = useMemo(() => items.filter((item) => item.user_id === clientId && !item.plan_date && item.meal_type === mealType), [clientId, items, mealType]);
   const clientItems = datedClientItems.length ? datedClientItems : legacyClientItems;
@@ -122,6 +135,7 @@ export function MealManager({ clients, items, initialClientId }: { clients: Clie
   }
 
   function fresh(nextType = mealType, nextClientId = clientId, nextDate = planDate) {
+    requests.current.delete("save");
     setForm(blank(nextClientId, nextType, nextDate));
     setMessage("");
   }
@@ -139,17 +153,21 @@ export function MealManager({ clients, items, initialClientId }: { clients: Clie
 
   function save() {
     startTransition(async () => {
-      const result = await saveCoachingMeal(form);
+      const result = await invoke(() => saveCoachingMeal({ ...form, requestId: requestId("save", form) }));
       setOk(result.ok);
       setMessage(result.message);
-      if (result.ok) router.refresh();
+      if (result.ok) {
+        setForm((current) => JSON.stringify(current) === JSON.stringify(form) ? { ...current, id: result.mealId } : current);
+        router.refresh();
+      }
     });
   }
 
   function remove() {
     if (!form.id || !window.confirm(`ဒီ meal ကို ${selectedClientName} ရဲ့ Plan ကနေ တကယ်ဖယ်မလား?`)) return;
     startTransition(async () => {
-      const result = await deleteCoachingMeal({ id: form.id, userId: clientId });
+      const payload = { id: form.id, userId: clientId };
+      const result = await invoke(() => deleteCoachingMeal({ ...payload, requestId: requestId("delete", payload) }));
       setOk(result.ok);
       setMessage(result.message);
       if (result.ok) {
@@ -162,7 +180,8 @@ export function MealManager({ clients, items, initialClientId }: { clients: Clie
 
   function assignDates() {
     startTransition(async () => {
-      const result = await duplicateCoachingMealDay({ userId: clientId, sourceDate: planDate, targetDates });
+      const payload = { userId: clientId, sourceDate: planDate, targetDates };
+      const result = await invoke(() => duplicateCoachingMealDay({ ...payload, requestId: requestId("copy", payload) }));
       setOk(result.ok);
       setMessage(result.message);
       if (result.ok) {
@@ -174,7 +193,8 @@ export function MealManager({ clients, items, initialClientId }: { clients: Clie
 
   function initializeDay() {
     startTransition(async () => {
-      const result = await duplicateCoachingMealDay({ userId: clientId, sourceDate: planDate, targetDate: planDate });
+      const payload = { userId: clientId, sourceDate: planDate, targetDate: planDate };
+      const result = await invoke(() => duplicateCoachingMealDay({ ...payload, requestId: requestId("initialize", payload) }));
       setOk(result.ok);
       setMessage(result.message);
       if (result.ok) {
